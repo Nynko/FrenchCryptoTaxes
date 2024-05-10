@@ -7,12 +7,12 @@ only the whole portfolio is considered.
 A wallet can be a crypto wallet or a fiat wallet.
 */
 #[derive(Hash, Eq, PartialEq, Debug, Clone)]
-pub enum Wallet {
-    Fiat(WalletBase),
-    Crypto(WalletBase)
+pub enum Wallet<'a> {
+    Fiat(WalletBase<'a, 'a>),
+    Crypto(WalletBase<'a, 'a>)
 }
 
-impl Wallet {
+impl<'a> Wallet<'a> {
     pub fn get(&self) -> &WalletBase{
         match self {
             Wallet::Fiat(base) => base,
@@ -20,7 +20,7 @@ impl Wallet {
         }
     }
 
-    pub fn get_mut(&mut self) -> &mut WalletBase{
+    pub fn get_mut(&mut self) -> &'a mut WalletBase{
         match self {
             Wallet::Fiat(base) => base,
             Wallet::Crypto(base) => base
@@ -43,9 +43,9 @@ pub enum Owner{
 }
 
 #[derive(Hash, Eq, PartialEq, Debug, Clone)]
-pub struct WalletBase {
-    pub currency: Currency,
-    pub platform: Platform,
+pub struct WalletBase<'a,'b> {
+    pub currency: &'a Currency,
+    pub platform: &'b Platform,
     pub owner: Owner,
     pub balance: u64,
     pub discriminator: Option<WalletType>,
