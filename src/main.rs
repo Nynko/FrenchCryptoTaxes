@@ -4,7 +4,7 @@ use crate::{
     api::{fetch_history_kraken, Tier},
     structs::{
         transaction::{self, Transaction},
-        Wallet, WalletMap,
+        wallet, Wallet, WalletIdMap,
     },
 };
 pub mod api;
@@ -20,10 +20,18 @@ use dotenv::dotenv;
 fn main() {
     dotenv().ok();
 
-    let mut wallets: WalletMap = HashMap::new();
+    let mut wallet_ids: WalletIdMap = HashMap::new();
+    let mut wallets: HashMap<String, Wallet> = HashMap::new();
     let transactions: Vec<Transaction> = Vec::new();
 
     let response = fetch_history_kraken(Tier::Intermediate).unwrap();
     println!("{:?}", response);
-    create_kraken_txs(wallets, transactions, response.0, response.1, response.2);
+    create_kraken_txs(
+        wallet_ids,
+        wallets,
+        transactions,
+        response.0,
+        response.1,
+        response.2,
+    );
 }

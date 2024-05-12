@@ -2,10 +2,34 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-/* Data storage in several hash-maps for easy access */
-pub type AddrMap<'a> = HashMap<&'a str, Wallet>;
-pub type PlatformMap<'a> = HashMap<&'a str, AddrMap<'a>>;
-pub type WalletMap<'a> = HashMap<&'a str, PlatformMap<'a>>;
+/* Data storage in several hash-maps for easy access of the id */
+pub type Address = String;
+pub type Currency = String;
+pub type WalletId = String;
+pub type AddrMap = HashMap<Address, WalletId>;
+pub type PlatformMap = HashMap<Platform, AddrMap>;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WalletIdMap {
+    ids: HashMap<Currency, PlatformMap>,
+}
+
+impl WalletIdMap {
+    pub fn new() -> Self {
+        return WalletIdMap {
+            ids: HashMap::new(),
+        };
+    }
+
+    pub fn get(&self, currency: String, platform: Platform, address: String) -> Option<WalletId> {
+        return self
+            .ids
+            .get(&currency)
+            .and_then(|map| map.get(&platform))
+            .and_then(|map| map.get(&address))
+            .cloned();
+    }
+}
 
 /* A wallet correspond to a crypto Wallet. For French taxes, there is no distinction between wallets,
 only the whole portfolio is considered.

@@ -5,12 +5,13 @@ use std::{collections::HashMap, str::FromStr};
 use crate::{
     api::{Deposit, EntryType, LedgerEntry, Withdrawal},
     errors::MappingError,
-    structs::{Transaction, TransactionBase, Wallet, WalletMap},
+    structs::{Transaction, TransactionBase, Wallet, WalletIdMap},
 };
 
 /* This function take existing currencies, wallets and Transactions and add the new elements  */
 pub fn create_kraken_txs(
-    wallets: WalletMap,
+    wallet_ids: WalletIdMap,
+    wallets: HashMap<String, Wallet>,
     txs: Vec<Transaction>,
     ledger: Vec<LedgerEntry>,
     deposits: HashMap<String, Deposit>,
@@ -33,9 +34,6 @@ pub fn create_kraken_txs(
 
                 let first_currency = &entry.asset;
                 let second_currency = &matching_entry.asset;
-
-                // Create the first currency if not exist
-                // Create second currency
 
                 // Create the first wallet if not exist  (from)
                 // Create the second wallet if not exis (to)
