@@ -8,8 +8,8 @@ A wallet can be a crypto wallet or a fiat wallet.
 */
 #[derive(Hash, Eq, PartialEq, Debug, Clone)]
 pub enum Wallet<'a> {
-    Fiat(WalletBase<'a, 'a>),
-    Crypto(WalletBase<'a, 'a>)
+    Fiat(WalletBase<'a>),
+    Crypto(WalletBase<'a>)
 }
 
 impl<'a> Wallet<'a> {
@@ -28,13 +28,6 @@ impl<'a> Wallet<'a> {
     }
 }
 
-#[derive(Hash, Eq, PartialEq, Debug, Clone)]
-pub struct Platform{
-    pub id: String,
-    pub name: String,
-}
-
-type WalletType = String;
 
 #[derive(Hash, Eq, PartialEq, Debug, Clone)]
 pub enum Owner{
@@ -43,10 +36,20 @@ pub enum Owner{
 }
 
 #[derive(Hash, Eq, PartialEq, Debug, Clone)]
-pub struct WalletBase<'a,'b> {
+pub enum Platform{
+    Binance,
+    Kraken,
+    Blockchain,
+    Other(String)
+}
+
+
+#[derive(Hash, Eq, PartialEq, Debug, Clone)]
+pub struct WalletBase<'a> { // currency + address + platform should be unique
     pub currency: &'a Currency,
-    pub platform: &'b Platform,
+    pub platform: Platform,
+    pub address: Option<String>,
     pub owner: Owner,
     pub balance: u64,
-    pub discriminator: Option<WalletType>,
+    pub info: Option<String>,
 }

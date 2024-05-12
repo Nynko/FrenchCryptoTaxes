@@ -127,36 +127,33 @@ mod tests {
         (btc_currency, eur_currency, eth_currency)
     }
     
-    fn create_platform() -> Platform {
-        Platform {
-            id: "test".to_string(),
-            name: "Binance".to_string(),
-        }
-    }
     
-    fn create_wallets<'a>(btc_currency: &'a Currency,  eur_currency: &'a Currency,eth_currency: &'a Currency, platform: &'a Platform) -> (Wallet<'a>,Wallet<'a>, Wallet<'a>) {
+    fn create_wallets<'a>(btc_currency: &'a Currency,  eur_currency: &'a Currency,eth_currency: &'a Currency, platform: &'a &str) -> (Wallet<'a>,Wallet<'a>, Wallet<'a>) {
         let btc = Wallet::Crypto(WalletBase {
             currency: btc_currency,
-            platform,
+            platform: Platform::Binance,
+            address:  None,
             owner: Owner::User,
             balance: 0,
-            discriminator: None,
+            info: None,
         });
     
         let eur = Wallet::Fiat(WalletBase {
             currency: eth_currency,
-            platform,
+            platform: Platform::Binance,
+            address:  None,
             owner: Owner::User,
             balance: 0,
-            discriminator: None,
+            info: None,
         });
 
         let eth = Wallet::Crypto(WalletBase {
             currency: btc_currency,
-            platform,
+            platform: Platform::Binance,
+            address:  None,
             owner: Owner::User,
             balance: 0,
-            discriminator: None,
+            info: None,
         });
     
         (btc,eur, eth )
@@ -166,7 +163,7 @@ mod tests {
     fn simple_transfer_with_fee() {
         let current_pf = get_pf(dec!(500.00),dec!(500.00),dec!(1000));
         let (btc,eur, eth ) = create_currencies();
-        let platform = create_platform();
+        let platform = "Binance";
         let (btc_wallet, eur_wallet, eth_wallet) = create_wallets(&btc,&eur,&eth,&platform);
 
         let from = btc_wallet;
@@ -204,7 +201,7 @@ mod tests {
     fn simple_trades() {
         let current_pf = get_pf(dec!(18000),dec!(18000),dec!(32000));
         let (btc,eur, eth ) = create_currencies();
-        let platform: Platform = create_platform();
+        let platform: &str = "Binance";
         let (btc_wallet, eur_wallet, _eth_wallet) = create_wallets(&btc,&eur,&eth,&platform);
 
         let init_pf = CurrentPortfolio{
@@ -238,7 +235,7 @@ mod tests {
     fn simple_two_trades() {
         let current_pf = get_pf(dec!(1000),dec!(1000),dec!(1200));
         let (btc,eur, eth ) = create_currencies();
-        let platform: Platform = create_platform();
+        let platform: &str = "Binance";
         let (btc_wallet, eur_wallet, _eth_wallet) = create_wallets(&btc,&eur,&eth,&platform);
 
         let init_pf = CurrentPortfolio{
