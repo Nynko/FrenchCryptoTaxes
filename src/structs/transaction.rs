@@ -1,6 +1,7 @@
 use super::{CurrentPortfolio, Wallet};
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
 
 /* A Transaction correspond to an exchange: Crypto or Fiat
 A transaction can be "taxable" meaning it is either a Crypto -> Fiat transaction, or a Crypto Payment.
@@ -26,16 +27,18 @@ Deposit: should never be from the same wallet, there is always an "external" wal
          Deposits are only available from Fiat Wallet
 */
 
+type WalletId = String;
+
 /* We only have two types of transactions here:
 
 A simple fee would be a transfer transaction to a wallet not owned by the user */
-#[derive(Hash, Eq, PartialEq, Debug, Clone)]
-pub enum Transaction<'a, 'b> {
+#[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub enum Transaction {
     // Transfer can be a "local" non taxable transfer, it can be a taxable transfer to external entity
     Transfer {
         tx: TransactionBase,
-        from: &'a Wallet<'a>,
-        to: &'b Wallet<'b>,
+        from: WalletId,
+        to: WalletId,
         amount: u64,
         price_eur: Decimal,
         pf: CurrentPortfolio,
@@ -43,8 +46,8 @@ pub enum Transaction<'a, 'b> {
     // Trade can be a Crypto/Crypto non taxable trade, or taxable sold of Crypto, or non taxable event: buying crypto
     Trade {
         tx: TransactionBase,
-        from: &'a Wallet<'a>,
-        to: &'b Wallet<'b>,
+        from: WalletId,
+        to: WalletId,
         sold_amount: u64,
         bought_amount: u64,
         bought_price_eur: Decimal,
@@ -52,17 +55,17 @@ pub enum Transaction<'a, 'b> {
     },
     Deposit {
         tx: TransactionBase,
-        to: &'a Wallet<'a>,
+        to: WalletId,
         amount: u64,
     }, // Fiat only
     Withdrawal {
         tx: TransactionBase,
-        from: &'a Wallet<'a>,
+        from: WalletId,
         amount: u64,
     }, // Fiat only
 }
 
-#[derive(Hash, Eq, PartialEq, Debug, Clone)]
+#[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionBase {
     pub id: String,
     pub fee: Option<Decimal>,
@@ -71,7 +74,7 @@ pub struct TransactionBase {
     pub fee_price: Option<Decimal>, // For now in EUR, think about creating a Price<Currency> or Price<T>
 }
 
-impl<'a> Transaction<'a, '_> {
+impl Transaction {
     pub fn get_tx_base(&self) -> &TransactionBase {
         match self {
             Transaction::Transfer { tx, .. } => tx,
@@ -83,12 +86,16 @@ impl<'a> Transaction<'a, '_> {
 
     pub fn new_deposit(
         tx: TransactionBase,
-        to: &'a Wallet,
+        to: &Wallet,
         amount: u64,
     ) -> Result<Self, &'static str> {
         // Ensure the wallet type is Fiat
         if let Wallet::Fiat(_) = to {
-            Ok(Transaction::Deposit { tx, to, amount })
+            Ok(Transaction::Deposit {
+                tx,
+                to: to.get().id.clone(),
+                amount,
+            })
         } else {
             Err("Deposit transactions can only use Fiat wallets")
         }
@@ -96,12 +103,16 @@ impl<'a> Transaction<'a, '_> {
 
     pub fn new_withdrawal(
         tx: TransactionBase,
-        from: &'a Wallet,
+        from: &Wallet,
         amount: u64,
     ) -> Result<Self, &'static str> {
         // Ensure the wallet type is Fiat
         if let Wallet::Fiat(_) = from {
-            Ok(Transaction::Withdrawal { tx, from, amount })
+            Ok(Transaction::Withdrawal {
+                tx,
+                from: from.get().id.clone(),
+                amount,
+            })
         } else {
             Err("Withdrawal transactions can only use Fiat wallets")
         }

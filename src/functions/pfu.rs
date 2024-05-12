@@ -154,14 +154,14 @@ mod tests {
         (btc_currency, eur_currency, eth_currency)
     }
 
-    fn create_wallets<'a>(
-        btc_currency: &'a Currency,
-        eur_currency: &'a Currency,
-        eth_currency: &'a Currency,
-        platform: &'a &str,
-    ) -> (Wallet<'a>, Wallet<'a>, Wallet<'a>) {
+    fn create_wallets(
+        btc_currency: &Currency,
+        eur_currency: &Currency,
+        eth_currency: &Currency,
+    ) -> (Wallet, Wallet, Wallet) {
         let btc = Wallet::Crypto(WalletBase {
-            currency: btc_currency,
+            id: String::from("btc"),
+            currency_id: btc_currency.id.clone(),
             platform: Platform::Binance,
             address: None,
             owner: Owner::User,
@@ -170,7 +170,8 @@ mod tests {
         });
 
         let eur = Wallet::Fiat(WalletBase {
-            currency: eth_currency,
+            id: String::from("eur"),
+            currency_id: eth_currency.id.clone(),
             platform: Platform::Binance,
             address: None,
             owner: Owner::User,
@@ -179,7 +180,8 @@ mod tests {
         });
 
         let eth = Wallet::Crypto(WalletBase {
-            currency: btc_currency,
+            id: String::from("eth"),
+            currency_id: btc_currency.id.clone(),
             platform: Platform::Binance,
             address: None,
             owner: Owner::User,
@@ -195,10 +197,9 @@ mod tests {
         let current_pf = get_pf(dec!(500.00), dec!(500.00), dec!(1000));
         let (btc, eur, eth) = create_currencies();
         let platform = "Binance";
-        let (btc_wallet, eur_wallet, eth_wallet) = create_wallets(&btc, &eur, &eth, &platform);
+        let (btc_wallet, eur_wallet, eth_wallet) = create_wallets(&btc, &eur, &eth);
 
         let from = btc_wallet;
-        let to = &from;
 
         let price_eur_btc = dec!(64000.02);
         let fee = dec!(0.001);
@@ -218,8 +219,8 @@ mod tests {
                 timestamp: Utc::now(),
                 is_taxable: false,
             },
-            from: &from,
-            to,
+            from: from.get_id(),
+            to: from.get_id(),
             amount: 1,
             price_eur: price_eur_btc,
             pf: init_pf,
@@ -237,7 +238,7 @@ mod tests {
         let current_pf = get_pf(dec!(18000), dec!(18000), dec!(32000));
         let (btc, eur, eth) = create_currencies();
         let platform: &str = "Binance";
-        let (btc_wallet, eur_wallet, _eth_wallet) = create_wallets(&btc, &eur, &eth, &platform);
+        let (btc_wallet, eur_wallet, _eth_wallet) = create_wallets(&btc, &eur, &eth);
 
         let init_pf = CurrentPortfolio {
             pf_total_value: dec!(32000),
@@ -253,8 +254,8 @@ mod tests {
                 timestamp: Utc::now(),
                 is_taxable: true,
             },
-            from: &btc_wallet,
-            to: &eur_wallet,
+            from: btc_wallet.get_id(),
+            to: eur_wallet.get_id(),
             sold_amount: 5,
             bought_amount: 20000,
             bought_price_eur: dec!(1),
@@ -276,7 +277,7 @@ mod tests {
         let current_pf = get_pf(dec!(1000), dec!(1000), dec!(1200));
         let (btc, eur, eth) = create_currencies();
         let platform: &str = "Binance";
-        let (btc_wallet, eur_wallet, _eth_wallet) = create_wallets(&btc, &eur, &eth, &platform);
+        let (btc_wallet, eur_wallet, _eth_wallet) = create_wallets(&btc, &eur, &eth);
 
         let init_pf = CurrentPortfolio {
             pf_total_value: dec!(1200),
@@ -292,8 +293,8 @@ mod tests {
                 timestamp: Utc::now(),
                 is_taxable: true,
             },
-            from: &btc_wallet,
-            to: &eur_wallet,
+            from: btc_wallet.get_id(),
+            to: eur_wallet.get_id(),
             sold_amount: 1,
             bought_amount: 450,
             bought_price_eur: dec!(1),
@@ -324,8 +325,8 @@ mod tests {
                 timestamp: Utc::now(),
                 is_taxable: true,
             },
-            from: &btc_wallet,
-            to: &eur_wallet,
+            from: btc_wallet.get_id(),
+            to: eur_wallet.get_id(),
             sold_amount: 1,
             bought_amount: 1300,
             bought_price_eur: dec!(1),

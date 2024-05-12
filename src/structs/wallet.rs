@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use super::Currency;
+use serde::{Deserialize, Serialize};
 
 /* Data storage in several hash-maps for easy access */
-pub type AddrMap<'a> = HashMap<&'a str, Wallet<'a>>;
+pub type AddrMap<'a> = HashMap<&'a str, Wallet>;
 pub type PlatformMap<'a> = HashMap<&'a str, AddrMap<'a>>;
 pub type WalletMap<'a> = HashMap<&'a str, PlatformMap<'a>>;
 
@@ -12,13 +12,13 @@ only the whole portfolio is considered.
 
 A wallet can be a crypto wallet or a fiat wallet.
 */
-#[derive(Hash, Eq, PartialEq, Debug, Clone)]
-pub enum Wallet<'a> {
-    Fiat(WalletBase<'a>),
-    Crypto(WalletBase<'a>),
+#[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub enum Wallet {
+    Fiat(WalletBase),
+    Crypto(WalletBase),
 }
 
-impl<'a> Wallet<'a> {
+impl Wallet {
     pub fn get(&self) -> &WalletBase {
         match self {
             Wallet::Fiat(base) => base,
@@ -26,7 +26,14 @@ impl<'a> Wallet<'a> {
         }
     }
 
-    pub fn get_mut(&mut self) -> &'a mut WalletBase {
+    pub fn get_id(&self) -> String {
+        match self {
+            Wallet::Fiat(base) => base.id.clone(),
+            Wallet::Crypto(base) => base.id.clone(),
+        }
+    }
+
+    pub fn get_mut(&mut self) -> &mut WalletBase {
         match self {
             Wallet::Fiat(base) => base,
             Wallet::Crypto(base) => base,
@@ -34,13 +41,13 @@ impl<'a> Wallet<'a> {
     }
 }
 
-#[derive(Hash, Eq, PartialEq, Debug, Clone)]
+#[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum Owner {
     User,
     Platform,
 }
 
-#[derive(Hash, Eq, PartialEq, Debug, Clone)]
+#[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum Platform {
     Binance,
     Kraken,
@@ -48,10 +55,11 @@ pub enum Platform {
     Other(String),
 }
 
-#[derive(Hash, Eq, PartialEq, Debug, Clone)]
-pub struct WalletBase<'a> {
+#[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub struct WalletBase {
     // currency + address + platform should be unique
-    pub currency: &'a Currency,
+    pub id: String,
+    pub currency_id: String,
     pub platform: Platform,
     pub address: Option<String>,
     pub owner: Owner,
