@@ -82,7 +82,7 @@ pub fn calculate_cost_basis(
 fn calculate_new_portfolio(
     tx: &TransactionBase,
     current_pf: &CurrentPortfolio,
-    amount: u64,
+    amount: Decimal,
     price_eur: Decimal,
 ) -> CurrentPortfolio {
     let current_cost_basis = current_pf.pf_cost_basis;
@@ -116,7 +116,7 @@ fn calculate_new_portfolio(
 mod tests {
     use chrono::Utc;
 
-    use crate::structs::{Currency, Owner, Platform, Wallet, WalletBase};
+    use crate::structs::{Owner, Platform, Wallet, WalletBase};
 
     use super::*;
 
@@ -129,39 +129,11 @@ mod tests {
             pf_total_value: total_value,
         };
     }
-    fn create_currencies() -> (Currency, Currency, Currency) {
-        let btc_currency = Currency {
-            id: "test".to_string(),
-            name: "bitcoin".to_string(),
-            symbol: "BTC".to_string(),
-            decimals: 8,
-        };
 
-        let eur_currency = Currency {
-            id: "eur".to_string(),
-            name: "euro".to_string(),
-            symbol: "EUR".to_string(),
-            decimals: 2,
-        };
-
-        let eth_currency = Currency {
-            id: "test2".to_string(),
-            name: "ethereum".to_string(),
-            symbol: "ETH".to_string(),
-            decimals: 18,
-        };
-
-        (btc_currency, eur_currency, eth_currency)
-    }
-
-    fn create_wallets(
-        btc_currency: &Currency,
-        eur_currency: &Currency,
-        eth_currency: &Currency,
-    ) -> (Wallet, Wallet, Wallet) {
+    fn create_wallets() -> (Wallet, Wallet, Wallet) {
         let btc = Wallet::Crypto(WalletBase {
             id: String::from("btc"),
-            currency_id: btc_currency.id.clone(),
+            currency: "bitcoin".to_string(),
             platform: Platform::Binance,
             address: None,
             owner: Owner::User,
@@ -171,7 +143,7 @@ mod tests {
 
         let eur = Wallet::Fiat(WalletBase {
             id: String::from("eur"),
-            currency_id: eth_currency.id.clone(),
+            currency: "euro".to_string(),
             platform: Platform::Binance,
             address: None,
             owner: Owner::User,
@@ -181,7 +153,7 @@ mod tests {
 
         let eth = Wallet::Crypto(WalletBase {
             id: String::from("eth"),
-            currency_id: btc_currency.id.clone(),
+            currency: "ethereum".to_string(),
             platform: Platform::Binance,
             address: None,
             owner: Owner::User,
@@ -195,9 +167,8 @@ mod tests {
     #[test]
     fn simple_transfer_with_fee() {
         let current_pf = get_pf(dec!(500.00), dec!(500.00), dec!(1000));
-        let (btc, eur, eth) = create_currencies();
         let platform = "Binance";
-        let (btc_wallet, eur_wallet, eth_wallet) = create_wallets(&btc, &eur, &eth);
+        let (btc_wallet, eur_wallet, eth_wallet) = create_wallets();
 
         let from = btc_wallet;
 
@@ -221,7 +192,7 @@ mod tests {
             },
             from: from.get_id(),
             to: from.get_id(),
-            amount: 1,
+            amount: dec!(1),
             price_eur: price_eur_btc,
             pf: init_pf,
         };
@@ -236,9 +207,8 @@ mod tests {
     #[test]
     fn simple_trades() {
         let current_pf = get_pf(dec!(18000), dec!(18000), dec!(32000));
-        let (btc, eur, eth) = create_currencies();
         let platform: &str = "Binance";
-        let (btc_wallet, eur_wallet, _eth_wallet) = create_wallets(&btc, &eur, &eth);
+        let (btc_wallet, eur_wallet, _eth_wallet) = create_wallets();
 
         let init_pf = CurrentPortfolio {
             pf_total_value: dec!(32000),
@@ -256,8 +226,8 @@ mod tests {
             },
             from: btc_wallet.get_id(),
             to: eur_wallet.get_id(),
-            sold_amount: 5,
-            bought_amount: 20000,
+            sold_amount: dec!(5),
+            bought_amount: dec!(20000),
             bought_price_eur: dec!(1),
             pf: init_pf,
         };
@@ -275,9 +245,8 @@ mod tests {
     #[test]
     fn simple_two_trades() {
         let current_pf = get_pf(dec!(1000), dec!(1000), dec!(1200));
-        let (btc, eur, eth) = create_currencies();
         let platform: &str = "Binance";
-        let (btc_wallet, eur_wallet, _eth_wallet) = create_wallets(&btc, &eur, &eth);
+        let (btc_wallet, eur_wallet, _eth_wallet) = create_wallets();
 
         let init_pf = CurrentPortfolio {
             pf_total_value: dec!(1200),
@@ -295,8 +264,8 @@ mod tests {
             },
             from: btc_wallet.get_id(),
             to: eur_wallet.get_id(),
-            sold_amount: 1,
-            bought_amount: 450,
+            sold_amount: dec!(1),
+            bought_amount: dec!(450),
             bought_price_eur: dec!(1),
             pf: init_pf,
         };
@@ -327,8 +296,8 @@ mod tests {
             },
             from: btc_wallet.get_id(),
             to: eur_wallet.get_id(),
-            sold_amount: 1,
-            bought_amount: 1300,
+            sold_amount: dec!(1),
+            bought_amount: dec!(1300),
             bought_price_eur: dec!(1),
             pf: init_pf2,
         };

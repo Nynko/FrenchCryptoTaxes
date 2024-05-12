@@ -5,12 +5,11 @@ use std::{collections::HashMap, str::FromStr};
 use crate::{
     api::{Deposit, EntryType, LedgerEntry, Withdrawal},
     errors::MappingError,
-    structs::{Currency, Transaction, TransactionBase, Wallet, WalletMap},
+    structs::{Transaction, TransactionBase, Wallet, WalletMap},
 };
 
 /* This function take existing currencies, wallets and Transactions and add the new elements  */
 pub fn create_kraken_txs(
-    currencies: HashMap<&str, Currency>,
     wallets: WalletMap,
     txs: Vec<Transaction>,
     ledger: Vec<LedgerEntry>,
@@ -26,11 +25,21 @@ pub fn create_kraken_txs(
                 let matching_entry = &ledger[index + 1];
                 if matching_entry.refid != *refid {
                     // Yeah, too lazy to do a proper check along the whole vec, this case shouldn't happen
-                    println!("{:?}", ledger[index - 1]);
+                    println!("{:?} - {:?}", entry, ledger[index + 1]);
                     return Err(MappingError::new(String::from("We have unmatching refid, meaning either something appeared between a trade or data are broken.
                     Either way, show this error to the dev on github with your data, and we will help you. This shouldn't happen")));
                 }
                 index += 1;
+
+                let first_currency = &entry.asset;
+                let second_currency = &matching_entry.asset;
+
+                // Create the first currency if not exist
+                // Create second currency
+
+                // Create the first wallet if not exist  (from)
+                // Create the second wallet if not exis (to)
+                // Create tx
             }
             // EntryType::Transfer => todo!(),
             // EntryType::Deposit => todo!(),

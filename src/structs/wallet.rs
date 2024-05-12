@@ -59,7 +59,7 @@ pub enum Platform {
 pub struct WalletBase {
     // currency + address + platform should be unique
     pub id: String,
-    pub currency_id: String,
+    pub currency: String,
     pub platform: Platform,
     pub address: Option<String>,
     pub owner: Owner,

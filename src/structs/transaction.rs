@@ -39,7 +39,7 @@ pub enum Transaction {
         tx: TransactionBase,
         from: WalletId,
         to: WalletId,
-        amount: u64,
+        amount: Decimal,
         price_eur: Decimal,
         pf: CurrentPortfolio,
     },
@@ -48,20 +48,20 @@ pub enum Transaction {
         tx: TransactionBase,
         from: WalletId,
         to: WalletId,
-        sold_amount: u64,
-        bought_amount: u64,
+        sold_amount: Decimal,
+        bought_amount: Decimal,
         bought_price_eur: Decimal,
         pf: CurrentPortfolio,
     },
     Deposit {
         tx: TransactionBase,
         to: WalletId,
-        amount: u64,
+        amount: Decimal,
     }, // Fiat only
     Withdrawal {
         tx: TransactionBase,
         from: WalletId,
-        amount: u64,
+        amount: Decimal,
     }, // Fiat only
 }
 
@@ -87,7 +87,7 @@ impl Transaction {
     pub fn new_deposit(
         tx: TransactionBase,
         to: &Wallet,
-        amount: u64,
+        amount: Decimal,
     ) -> Result<Self, &'static str> {
         // Ensure the wallet type is Fiat
         if let Wallet::Fiat(_) = to {
@@ -104,7 +104,7 @@ impl Transaction {
     pub fn new_withdrawal(
         tx: TransactionBase,
         from: &Wallet,
-        amount: u64,
+        amount: Decimal,
     ) -> Result<Self, &'static str> {
         // Ensure the wallet type is Fiat
         if let Wallet::Fiat(_) = from {
