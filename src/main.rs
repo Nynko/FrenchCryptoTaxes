@@ -15,17 +15,16 @@ pub mod structs;
 pub mod utils;
 use api::{create_kraken_txs, fetch_assets_pair, fetch_specific_trade_data, handle_kraken_data};
 use dotenv::dotenv;
+use structs::{TransactionManager, WalletManager};
 
 // use crate::structs::Transaction;
 
 fn main() {
     dotenv().ok();
 
-    let mut wallet_ids: WalletIdMap = WalletIdMap::new();
-    let mut wallets: HashMap<String, Wallet> = HashMap::new();
-    let mut transactions: Vec<Transaction> = Vec::new();
+    let mut wallet_manager = WalletManager::new().unwrap();
+    let mut transactions_manager = TransactionManager::new().unwrap();
 
-    handle_kraken_data(&mut wallet_ids,& mut wallets,&mut transactions).unwrap();
-
-
+    let kraken_txs = handle_kraken_data(&mut wallet_manager).unwrap();
+    transactions_manager.extend(kraken_txs);
 }

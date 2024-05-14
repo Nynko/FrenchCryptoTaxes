@@ -33,15 +33,13 @@ impl WalletIdMap {
     }
 
     pub fn insert(
-        & mut self,
-        currency:String,
+        &mut self,
+        currency: String,
         platform: Platform,
         address: Option<String>,
-        wallet_id: String
+        wallet_id: String,
     ) -> Option<WalletId> {
-        return self
-            .ids
-            .insert((currency, platform, address),wallet_id);
+        return self.ids.insert((currency, platform, address), wallet_id);
     }
 }
 
@@ -90,7 +88,7 @@ impl Wallet {
 pub enum Owner {
     User,
     Platform,
-    Other
+    Other,
 }
 
 #[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]

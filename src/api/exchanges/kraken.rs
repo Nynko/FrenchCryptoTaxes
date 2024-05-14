@@ -89,8 +89,8 @@ async fn fetch_ledger_data(
     api_secret: &String,
     counter: &mut u8,
     tier: &Tier,
-) -> Result<Vec<LedgerEntry>, ApiError> {
-    let mut trade_history: Vec<LedgerEntry> = Vec::new();
+) -> Result<Vec<LedgerHistory>, ApiError> {
+    let mut ledger_history: Vec<LedgerHistory> = Vec::new();
     let mut unique_entries: HashSet<String> = HashSet::new();
     let url_path = String::from("/0/private/Ledgers");
     let mut params = HashMap::new();
@@ -108,7 +108,7 @@ async fn fetch_ledger_data(
         count = result.count;
         for (key, entry) in result.ledger.iter() {
             if unique_entries.insert(key.to_string()) {
-                trade_history.push(entry.clone());
+                ledger_history.push(entry.clone());
             }
         }
     }
@@ -129,13 +129,57 @@ async fn fetch_ledger_data(
         if let Some(result) = response.result {
             for (key, entry) in result.ledger.iter() {
                 if unique_entries.insert(key.to_string()) {
-                    trade_history.push(entry.clone());
+                    ledger_history.push(entry.clone());
                 }
             }
         }
     }
 
-    trade_history.sort_by(|a, b| a.time.total_cmp(&b.time));
+    ledger_history.sort_by(|a, b| a.time.total_cmp(&b.time));
+
+    return Ok(ledger_history);
+}
+
+async fn fetch_trade_history(
+    api_key: &String,
+    api_secret: &String,
+    counter: &mut u8,
+    tier: &Tier,
+) -> Result<HashMap<String, TradeInfo>, ApiError> {
+    let url_path = String::from("/0/private/TradesHistory");
+    let mut params = HashMap::new();
+    let mut trade_history = HashMap::new();
+    let trade_response: Response<TradeHistory> =
+        fetch_data(&url_path, &mut params, &api_key, &api_secret)
+            .await
+            .map_err(|e| ApiError::new(e.to_string()))?;
+    *counter += 2;
+    if !trade_response.error.is_empty() {
+        return Err(ApiError::new(trade_response.error.concat()));
+    }
+    let mut count: u32 = 0;
+    if let Some(result) = trade_response.result {
+        count = result.count;
+        trade_history.extend(result.trades);
+    }
+    for offset in (50..count).step_by(50) {
+        params.insert("ofs", offset.to_string());
+        if tier.is_above_limit(*counter, 2) {
+            sleep(tier.get_sleep_time(2)).await;
+            *counter -= 2;
+        }
+        let response: Response<TradeHistory> =
+            fetch_data(&url_path, &mut params, &api_key, &api_secret)
+                .await
+                .map_err(|e| ApiError::new(e.to_string()))?;
+        *counter += 2;
+        if !response.error.is_empty() {
+            return Err(ApiError::new(response.error.concat()));
+        }
+        if let Some(result) = response.result {
+            trade_history.extend(result.trades);
+        }
+    }
 
     return Ok(trade_history);
 }
@@ -224,60 +268,51 @@ async fn fetch_withdraw_data(
     return Ok(withdraw_history);
 }
 
-
-pub async fn fetch_specific_trade_data(time: f64, trading_pair : String) -> Result<Response<TickData>,ApiError>{
-
+pub async fn fetch_specific_trade_data(
+    time: f64,
+    trading_pair: String,
+) -> Result<Response<TickData>, ApiError> {
     let url = "/0/public/Trades";
     let mut params = HashMap::new();
     params.insert("pair", trading_pair);
     params.insert("since", time.to_string());
     params.insert("count", 6.to_string());
     let encoded = form_urlencoded::Serializer::new(String::new())
-    .extend_pairs(params.clone())
-    .finish();
+        .extend_pairs(params.clone())
+        .finish();
 
-    let full_url = [API_KRAKEN_ENDPOINT, url,"?",&encoded].concat();
+    let full_url = [API_KRAKEN_ENDPOINT, url, "?", &encoded].concat();
 
     let headers = HeaderMap::new();
 
     let client = reqwest::Client::new();
-    let response = client
-        .get(full_url)
-        .headers(headers)
-        .send()
-        .await
-        .unwrap();
+    let response = client.get(full_url).headers(headers).send().await.unwrap();
 
     let text = response.text().await.unwrap();
 
     let trade_response: Response<TickData> = serde_json::from_str(&text).unwrap();
 
-    if !trade_response.error.is_empty(){
-        return Err(ApiError::new(trade_response.error.concat()))
+    if !trade_response.error.is_empty() {
+        return Err(ApiError::new(trade_response.error.concat()));
     }
 
     return Ok(trade_response);
 }
 
 #[tokio::main]
-pub async fn fetch_assets_pair()-> Result<Response<AssetPairs>,ApiError>{
+pub async fn fetch_assets_pair() -> Result<Response<AssetPairs>, ApiError> {
     let url = "/0/public/AssetPairs";
     let full_url = [API_KRAKEN_ENDPOINT, url].concat();
     let headers = HeaderMap::new();
     let client = reqwest::Client::new();
-    let response = client
-        .get(full_url)
-        .headers(headers)
-        .send()
-        .await
-        .unwrap();
+    let response = client.get(full_url).headers(headers).send().await.unwrap();
 
     let text = response.text().await.unwrap();
 
     let trade_response: Response<AssetPairs> = serde_json::from_str(&text).unwrap();
 
-    if !trade_response.error.is_empty(){
-        return Err(ApiError::new(trade_response.error.concat()))
+    if !trade_response.error.is_empty() {
+        return Err(ApiError::new(trade_response.error.concat()));
     }
 
     return Ok(trade_response);
@@ -288,7 +323,8 @@ pub async fn fetch_history_kraken(
     tier: Tier,
 ) -> Result<
     (
-        Vec<LedgerEntry>,
+        Vec<LedgerHistory>,
+        HashMap<String, TradeInfo>,
         HashMap<String, Deposit>,
         HashMap<String, Withdrawal>,
     ),
@@ -299,14 +335,16 @@ pub async fn fetch_history_kraken(
         env::var("KRAKEN_SECRET").expect("KRAKEN_SECRET not set in .env file");
     let mut api_counter: u8 = 0; // Counter limit to 15 then need to wait apprx 6s with decay of -0.33/s see https://docs.kraken.com/api/docs/guides/spot-rest-ratelimits
                                  // let sleep_time
-    let trade_history: Vec<LedgerEntry> =
+    let ledger_history: Vec<LedgerHistory> =
         fetch_ledger_data(&api_key, &api_secret, &mut api_counter, &tier).await?;
+    let trade_history: HashMap<String, TradeInfo> =
+        fetch_trade_history(&api_key, &api_secret, &mut api_counter, &tier).await?;
     let deposits: HashMap<String, Deposit> =
         fetch_deposit_data(&api_key, &api_secret, &mut api_counter, &tier).await?;
     let withdrawals: HashMap<String, Withdrawal> =
         fetch_withdraw_data(&api_key, &api_secret, &mut api_counter, &tier).await?;
 
-    return Ok((trade_history, deposits, withdrawals));
+    return Ok((ledger_history, trade_history, deposits, withdrawals));
 }
 
 pub enum Tier {
@@ -353,7 +391,6 @@ impl Tier {
     }
 }
 
-
 #[derive(Debug, Deserialize)]
 pub struct TradeEntry {
     pub price: String,
@@ -376,7 +413,7 @@ pub struct AssetPair {
     pub altname: String,
     pub wsname: String,
     pub base: String,
-    pub quote: String
+    pub quote: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -384,7 +421,6 @@ pub struct AssetPairs {
     #[serde(flatten)]
     pub pairs: HashMap<String, AssetPair>,
 }
-
 
 #[derive(Debug, Deserialize)]
 pub struct Deposit {
@@ -466,7 +502,7 @@ pub enum EntryType {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct LedgerEntry {
+pub struct LedgerHistory {
     pub refid: String,
     pub time: f64,
     pub r#type: EntryType,
@@ -480,8 +516,40 @@ pub struct LedgerEntry {
 
 #[derive(Debug, Deserialize)]
 pub struct LedgersInfo {
-    pub ledger: HashMap<String, LedgerEntry>,
+    pub ledger: HashMap<String, LedgerHistory>,
     pub count: u32,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TradeHistory {
+    pub trades: HashMap<String, TradeInfo>,
+    pub count: u32,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TradeInfo {
+    pub ordertxid: String,
+    pub postxid: String,
+    pub pair: String,
+    pub time: f64,
+    pub r#type: String,
+    pub ordertype: String,
+    pub price: String,
+    pub cost: String,
+    pub fee: String,
+    pub vol: String,
+    pub margin: String,
+    pub misc: String,
+    pub trade_id: i64,
+    pub maker: bool,
+    pub posstatus: Option<String>,
+    pub cprice: Option<f64>,
+    pub ccost: Option<f64>,
+    pub cfee: Option<f64>,
+    pub cvol: Option<f64>,
+    pub cmargin: Option<f64>,
+    pub net: Option<f64>,
+    pub trades: Option<Vec<String>>,
 }
 
 #[cfg(test)]

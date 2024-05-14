@@ -1,4 +1,4 @@
-use super::{CurrentPortfolio, Wallet};
+use super::{CurrentCostBasis, Wallet};
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -40,18 +40,17 @@ pub enum Transaction {
         from: WalletId,
         to: WalletId,
         amount: Decimal,
-        price_eur: Decimal, // Only useful if taxable event 
-        pf: CurrentPortfolio,
+        pf: CurrentCostBasis,
     },
     // Trade can be a Crypto/Crypto non taxable trade, or taxable sold of Crypto, or non taxable event: buying crypto
     Trade {
         tx: TransactionBase,
         from: WalletId,
         to: WalletId,
+        exchange_pair: Option<(String, String)>,
         sold_amount: Decimal,
         bought_amount: Decimal,
-        bought_price_eur: Decimal, // Only useful if taxable event 
-        pf: CurrentPortfolio,
+        pf: CurrentCostBasis,
     },
     Deposit {
         tx: TransactionBase,
@@ -65,12 +64,24 @@ pub enum Transaction {
     }, // Fiat only
 }
 
+/*The pf_total_value should be set depending on the global value of the portfolio before each transaction (at least each taxable one).
+It can be caculated from the price of all wallets at an instant t.
+The issue is getting price at instant t may take time (calling API). We want to get that information before actually treating the transaction,
+when we only want it for taxable events.*/
+#[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub struct Taxable {
+    // Currently in EUR
+    pub is_taxable: bool,
+    pub price_eur: Decimal,
+    pub pf_total_value: Decimal,      // Portfolio total value in euro
+    pub is_pf_total_calculated: bool, // Each time recalculation is needed, this should be set to false (Recalculation use the PortfolioManager)
+}
+
 #[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionBase {
-    pub id: String,
     pub fee: Option<Decimal>,
     pub timestamp: DateTime<Utc>,
-    pub is_taxable: bool,
+    pub taxable: Option<Taxable>,
     pub fee_price: Option<Decimal>, // For now in EUR, think about creating a Price<Currency> or Price<T>
 }
 
