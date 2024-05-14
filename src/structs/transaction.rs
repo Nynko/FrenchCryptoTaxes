@@ -40,7 +40,7 @@ pub enum Transaction {
         from: WalletId,
         to: WalletId,
         amount: Decimal,
-        price_eur: Decimal,
+        price_eur: Decimal, // Only useful if taxable event 
         pf: CurrentPortfolio,
     },
     // Trade can be a Crypto/Crypto non taxable trade, or taxable sold of Crypto, or non taxable event: buying crypto
@@ -50,7 +50,7 @@ pub enum Transaction {
         to: WalletId,
         sold_amount: Decimal,
         bought_amount: Decimal,
-        bought_price_eur: Decimal,
+        bought_price_eur: Decimal, // Only useful if taxable event 
         pf: CurrentPortfolio,
     },
     Deposit {

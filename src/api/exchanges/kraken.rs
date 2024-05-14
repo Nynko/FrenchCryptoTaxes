@@ -14,7 +14,7 @@ use std::{
 };
 use tokio::time::sleep;
 
-use crate::errors::ApiError;
+use crate::errors::{ApiError, MappingError};
 const API_KRAKEN_ENDPOINT: &str = "https://api.kraken.com";
 
 /* As per documentation signature is HMAC-SHA512 of (URI path + SHA256(nonce + POST data)) and base64 decoded secret API key.
@@ -224,6 +224,65 @@ async fn fetch_withdraw_data(
     return Ok(withdraw_history);
 }
 
+
+pub async fn fetch_specific_trade_data(time: f64, trading_pair : String) -> Result<Response<TickData>,ApiError>{
+
+    let url = "/0/public/Trades";
+    let mut params = HashMap::new();
+    params.insert("pair", trading_pair);
+    params.insert("since", time.to_string());
+    params.insert("count", 6.to_string());
+    let encoded = form_urlencoded::Serializer::new(String::new())
+    .extend_pairs(params.clone())
+    .finish();
+
+    let full_url = [API_KRAKEN_ENDPOINT, url,"?",&encoded].concat();
+
+    let headers = HeaderMap::new();
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(full_url)
+        .headers(headers)
+        .send()
+        .await
+        .unwrap();
+
+    let text = response.text().await.unwrap();
+
+    let trade_response: Response<TickData> = serde_json::from_str(&text).unwrap();
+
+    if !trade_response.error.is_empty(){
+        return Err(ApiError::new(trade_response.error.concat()))
+    }
+
+    return Ok(trade_response);
+}
+
+#[tokio::main]
+pub async fn fetch_assets_pair()-> Result<Response<AssetPairs>,ApiError>{
+    let url = "/0/public/AssetPairs";
+    let full_url = [API_KRAKEN_ENDPOINT, url].concat();
+    let headers = HeaderMap::new();
+    let client = reqwest::Client::new();
+    let response = client
+        .get(full_url)
+        .headers(headers)
+        .send()
+        .await
+        .unwrap();
+
+    let text = response.text().await.unwrap();
+
+    let trade_response: Response<AssetPairs> = serde_json::from_str(&text).unwrap();
+
+    if !trade_response.error.is_empty(){
+        return Err(ApiError::new(trade_response.error.concat()))
+    }
+
+    return Ok(trade_response);
+}
+
 #[tokio::main]
 pub async fn fetch_history_kraken(
     tier: Tier,
@@ -294,16 +353,38 @@ impl Tier {
     }
 }
 
-// #[derive(Debug, Deserialize, Clone)]
-// pub enum ParsedLedger {
-//     Trade(LedgerEntry, LedgerEntry),
-// }
 
-// #[derive(Debug, Deserialize, Clone)]
-// pub struct LedgerWallets {
-//     asset: String, // On kraken Stacking assets are represented like USDT.M or SOL.S... So we don't need more for differentiate the wallets
-//     wallet_type: String,
-// }
+#[derive(Debug, Deserialize)]
+pub struct TradeEntry {
+    pub price: String,
+    pub volume: String,
+    pub time: f64,
+    pub buy_sell: String,
+    pub market_limit: String,
+    pub miscellaneous: String,
+    pub trade_id: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TickData {
+    #[serde(flatten)]
+    pub trades: HashMap<String, Vec<TradeEntry>>,
+    pub last: String,
+}
+#[derive(Debug, Deserialize)]
+pub struct AssetPair {
+    pub altname: String,
+    pub wsname: String,
+    pub base: String,
+    pub quote: String
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AssetPairs {
+    #[serde(flatten)]
+    pub pairs: HashMap<String, AssetPair>,
+}
+
 
 #[derive(Debug, Deserialize)]
 pub struct Deposit {

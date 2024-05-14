@@ -1,17 +1,16 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Add};
 
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-/* Data storage in several hash-maps for easy access of the id */
-pub type Address = String;
+/* Data storage for easy access of the id */
+pub type Address = Option<String>;
 pub type Currency = String;
 pub type WalletId = String;
-pub type AddrMap = HashMap<Address, WalletId>;
-pub type PlatformMap = HashMap<Platform, AddrMap>;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WalletIdMap {
-    ids: HashMap<Currency, PlatformMap>,
+    pub ids: HashMap<(Currency, Platform, Address), WalletId>,
 }
 
 impl WalletIdMap {
@@ -21,13 +20,28 @@ impl WalletIdMap {
         };
     }
 
-    pub fn get(&self, currency: String, platform: Platform, address: String) -> Option<WalletId> {
+    pub fn get(
+        &self,
+        currency: &String,
+        platform: &Platform,
+        address: &Option<String>,
+    ) -> Option<WalletId> {
         return self
             .ids
-            .get(&currency)
-            .and_then(|map| map.get(&platform))
-            .and_then(|map| map.get(&address))
+            .get(&(currency.clone(), platform.clone(), address.clone()))
             .cloned();
+    }
+
+    pub fn insert(
+        & mut self,
+        currency:String,
+        platform: Platform,
+        address: Option<String>,
+        wallet_id: String
+    ) -> Option<WalletId> {
+        return self
+            .ids
+            .insert((currency, platform, address),wallet_id);
     }
 }
 
@@ -57,6 +71,13 @@ impl Wallet {
         }
     }
 
+    pub fn get_currency(&self) -> Currency {
+        match self {
+            Wallet::Fiat(base) => base.currency.clone(),
+            Wallet::Crypto(base) => base.currency.clone(),
+        }
+    }
+
     pub fn get_mut(&mut self) -> &mut WalletBase {
         match self {
             Wallet::Fiat(base) => base,
@@ -69,6 +90,7 @@ impl Wallet {
 pub enum Owner {
     User,
     Platform,
+    Other
 }
 
 #[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
@@ -87,6 +109,6 @@ pub struct WalletBase {
     pub platform: Platform,
     pub address: Option<String>,
     pub owner: Owner,
-    pub balance: u64,
+    pub balance: Decimal,
     pub info: Option<String>,
 }

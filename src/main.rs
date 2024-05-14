@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    api::{fetch_history_kraken, Tier},
+    api::{fetch_history_kraken, kraken_pairs, map_asset_pairs, Tier},
     structs::{
         transaction::{self, Transaction},
         wallet, Wallet, WalletIdMap,
@@ -12,7 +12,8 @@ pub mod errors;
 pub mod functions;
 pub mod parsing;
 pub mod structs;
-use api::create_kraken_txs;
+pub mod utils;
+use api::{create_kraken_txs, fetch_assets_pair, fetch_specific_trade_data, handle_kraken_data};
 use dotenv::dotenv;
 
 // use crate::structs::Transaction;
@@ -20,18 +21,11 @@ use dotenv::dotenv;
 fn main() {
     dotenv().ok();
 
-    let mut wallet_ids: WalletIdMap = HashMap::new();
+    let mut wallet_ids: WalletIdMap = WalletIdMap::new();
     let mut wallets: HashMap<String, Wallet> = HashMap::new();
-    let transactions: Vec<Transaction> = Vec::new();
+    let mut transactions: Vec<Transaction> = Vec::new();
 
-    let response = fetch_history_kraken(Tier::Intermediate).unwrap();
-    println!("{:?}", response);
-    create_kraken_txs(
-        wallet_ids,
-        wallets,
-        transactions,
-        response.0,
-        response.1,
-        response.2,
-    );
+    handle_kraken_data(&mut wallet_ids,& mut wallets,&mut transactions).unwrap();
+
+
 }

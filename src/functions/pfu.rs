@@ -137,7 +137,7 @@ mod tests {
             platform: Platform::Binance,
             address: None,
             owner: Owner::User,
-            balance: 0,
+            balance: dec!(0),
             info: None,
         });
 
@@ -147,7 +147,7 @@ mod tests {
             platform: Platform::Binance,
             address: None,
             owner: Owner::User,
-            balance: 0,
+            balance: dec!(0),
             info: None,
         });
 
@@ -157,7 +157,7 @@ mod tests {
             platform: Platform::Binance,
             address: None,
             owner: Owner::User,
-            balance: 0,
+            balance: dec!(0),
             info: None,
         });
 
