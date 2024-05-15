@@ -2,6 +2,7 @@ use super::{CurrentCostBasis, Wallet};
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use core::hash::Hash;
 
 /* A Transaction correspond to an exchange: Crypto or Fiat
 A transaction can be "taxable" meaning it is either a Crypto -> Fiat transaction, or a Crypto Payment.
@@ -15,9 +16,9 @@ We can deduce this fee from the total amount invested and it can also be put on 
 This can mean several things:
     - it can be a trade (or swap),
     - it can be a money "creation": gift/reward/interest/staking interest/ ... (deposit are not here, see below)
-    - it can be a self-transaction. This can happen in the blockchain, although it won't often happen in exchanges (often we will create
-        another wallet with a discriminator: Example: The platform of the Wallet is Binance, and the Currency BTC: We can have a Wallet without discriminator (main)
-        and a wallet with a "earn" discriminator which describe Binance earn).
+    - it can be a self-transaction. This can happen in the blockchain, although it won't often happen in exchanges (often exchanges use another currency for stacking...
+                                    it ends up creating a new wallet for us. Although we don't often need to take the wallets associated with staking and just ignored related txs.
+                                    Even if in the future we do: we should be able to easily hide these are they are making it more difficult to read the important txs)
 
 
 Deposit: should never be from the same wallet, there is always an "external" wallet
@@ -31,7 +32,7 @@ type WalletId = String;
 
 /* We only have two types of transactions here:
 
-A simple fee would be a transfer transaction to a wallet not owned by the user */
+A simple fee would be a transfer transaction to a wallet not owned by the user*/
 #[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum Transaction {
     // Transfer can be a "local" non taxable transfer, it can be a taxable transfer to external entity
@@ -40,7 +41,7 @@ pub enum Transaction {
         from: WalletId,
         to: WalletId,
         amount: Decimal,
-        pf: CurrentCostBasis,
+        cost_basis: CurrentCostBasis,
     },
     // Trade can be a Crypto/Crypto non taxable trade, or taxable sold of Crypto, or non taxable event: buying crypto
     Trade {
@@ -50,7 +51,7 @@ pub enum Transaction {
         exchange_pair: Option<(String, String)>,
         sold_amount: Decimal,
         bought_amount: Decimal,
-        pf: CurrentCostBasis,
+        cost_basis: CurrentCostBasis,
     },
     Deposit {
         tx: TransactionBase,
@@ -77,8 +78,10 @@ pub struct Taxable {
     pub is_pf_total_calculated: bool, // Each time recalculation is needed, this should be set to false (Recalculation use the PortfolioManager)
 }
 
+
 #[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionBase {
+    pub id : String, // This should not be generated but come from an external source  OR if not possible deterministically created from "uniqueness" element of the transaction (timestamp, fee, wallet_ids...)
     pub fee: Option<Decimal>,
     pub timestamp: DateTime<Utc>,
     pub taxable: Option<Taxable>,

@@ -1,7 +1,7 @@
 use chrono::Utc;
-use reqwest::{Error, Response};
+use reqwest::Error;
 use serde::{Deserialize, Serialize};
-use std::{env, fs::File, io::Write};
+use std::env;
 
 use hmac::{Hmac, Mac};
 use serde_json::json;

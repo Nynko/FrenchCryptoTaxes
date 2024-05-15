@@ -66,7 +66,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore]
+    #[ignore] // Ignored to avoid rewriting data. Only run it if you don't have data, or do a backup... I should implement a temporary backup later or use a mock.
     fn test_save() {
         let mut wallet_manager = WalletManager::new().unwrap();
 

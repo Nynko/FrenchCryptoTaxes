@@ -16,7 +16,7 @@ use crate::{
         wallet_manager::{self, WalletManager},
         CurrentCostBasis, Transaction, TransactionBase, Wallet, WalletIdMap,
     },
-    utils::generate_id,
+    utils::{f64_to_datetime_utc, generate_id},
 };
 
 /* This function take existing currencies, wallets and Transactions and add the new elements  */
@@ -45,7 +45,7 @@ pub async fn create_kraken_txs(
                     Either way, show this error to the dev on github with your data, and we will help you. This shouldn't happen")));
                 }
 
-                
+
                 index += 1;
                 let trade = trades.get(refid).unwrap();
 
@@ -161,14 +161,15 @@ pub async fn create_kraken_txs(
 
                 // We initialize to 0, I am currently too lazy to overthink if we can use an Option or not
                 // The cost_basis will be calculated later.
-                let pf = CurrentCostBasis {
+                let cost_basis = CurrentCostBasis {
                     pf_cost_basis: dec!(0),
                     pf_total_cost: dec!(0),
                 };
                 let tx = Transaction::Trade {
                     tx: TransactionBase {
+                        id: refid.to_string(),
                         fee,
-                        timestamp: Utc.timestamp_opt(selling.time as i64, 0).unwrap(),
+                        timestamp: f64_to_datetime_utc(selling.time).unwrap(),
                         taxable,
                         fee_price,
                     },
@@ -177,11 +178,18 @@ pub async fn create_kraken_txs(
                     exchange_pair: Some((pair.0.clone(), pair.1.clone())),
                     sold_amount,
                     bought_amount,
-                    pf,
+                    cost_basis,
                 };
                 txs.push(tx);
             }
-            // EntryType::Transfer => todo!(),
+            // EntryType::Transfer => { // Mostly staking to spot and spot to staking, can apply but no need for now
+                                        // Only useful for having more notion of what happened to determine what we did.
+            //     match entry.subtype{
+            //         "stakingtospot" => {},
+            //         _ => (),
+            //     }
+
+            // },
             // EntryType::Deposit => todo!(),
             // EntryType::Withdrawal => todo!(),
             // EntryType::Staking => todo!(),
@@ -238,7 +246,8 @@ async fn get_pair_price(time: f64, trading_pair: String) -> Decimal {
         .await
         .unwrap();
     let result = prices.result.unwrap();
-    let vec_prices = result.trades.get(&trading_pair).unwrap();
+    let pair_key = result.trades.keys().next().unwrap(); // Should only contain one value
+    let vec_prices = result.trades.get(pair_key).unwrap();
     let mut total = dec!(0);
     for price in vec_prices {
         total += Decimal::from_str_exact(&price.price).unwrap();

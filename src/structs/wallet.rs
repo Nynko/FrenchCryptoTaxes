@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Add};
+use std::collections::HashMap;
 
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -107,6 +107,7 @@ pub struct WalletBase {
     pub platform: Platform,
     pub address: Option<String>,
     pub owner: Owner,
-    pub balance: Decimal,
+    pub balance: Decimal, // Balance and cost_basis will be calculated when running through all transactions
+    pub cost_basis: Decimal, // All crypto wallet with non-zero balance should have a non-zero cost basis otherwise it means you received the money for free (it should be also declared as income)
     pub info: Option<String>,
 }

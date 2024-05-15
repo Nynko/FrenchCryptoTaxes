@@ -8,7 +8,7 @@ plus_value =  prix_cession - (acquisition_pf_net * prix_cession / valeur_pf )
 */
 pub fn calculate_tax_gains(tx: Transaction) -> Decimal {
     match tx {
-        Transaction::Transfer { amount, tx, pf, .. } => {
+        Transaction::Transfer { amount, tx, cost_basis: pf, .. } => {
             let taxable = tx.taxable.unwrap();
             let price = taxable.price_eur;
             let pf_total_value = taxable.pf_total_value;
@@ -18,7 +18,7 @@ pub fn calculate_tax_gains(tx: Transaction) -> Decimal {
         Transaction::Trade {
             bought_amount,
             tx,
-            pf,
+            cost_basis: pf,
             ..
         } => {
             let taxable = tx.taxable.unwrap();
@@ -59,7 +59,7 @@ pub fn calculate_cost_basis(
             from: _,
             to: _,
             amount,
-            pf,
+            cost_basis: pf,
         } => {
             pf.pf_cost_basis = current_pf.pf_cost_basis;
             pf.pf_total_cost = current_pf.pf_total_cost;
@@ -72,7 +72,7 @@ pub fn calculate_cost_basis(
             exchange_pair: _,
             sold_amount: _,
             bought_amount,
-            pf,
+            cost_basis: pf,
         } => {
             pf.pf_cost_basis = current_pf.pf_cost_basis;
             pf.pf_total_cost = current_pf.pf_total_cost;
@@ -142,6 +142,7 @@ mod tests {
             owner: Owner::User,
             balance: dec!(0),
             info: None,
+            cost_basis: dec!(0),
         });
 
         let eur = Wallet::Fiat(WalletBase {
@@ -152,6 +153,7 @@ mod tests {
             owner: Owner::User,
             balance: dec!(0),
             info: None,
+            cost_basis: dec!(0)
         });
 
         let eth = Wallet::Crypto(WalletBase {
@@ -162,6 +164,7 @@ mod tests {
             owner: Owner::User,
             balance: dec!(0),
             info: None,
+            cost_basis: dec!(0)
         });
 
         (btc, eur, eth)
@@ -186,6 +189,7 @@ mod tests {
 
         let mut tx = Transaction::Transfer {
             tx: TransactionBase {
+                id: "test".to_string(),
                 fee: Some(fee),
                 fee_price: Some(price_eur_btc),
                 timestamp: Utc::now(),
@@ -194,7 +198,7 @@ mod tests {
             from: from.get_id(),
             to: from.get_id(),
             amount: dec!(1),
-            pf: init_pf,
+            cost_basis: init_pf,
         };
 
         let new_pf = calculate_cost_basis(&mut tx, current_pf);
@@ -216,6 +220,7 @@ mod tests {
 
         let mut tx = Transaction::Trade {
             tx: TransactionBase {
+                id: "test".to_string(),
                 fee: None,
                 fee_price: None,
                 timestamp: Utc::now(),
@@ -231,7 +236,7 @@ mod tests {
             exchange_pair: Some(("BTC".to_string(), "EUR".to_uppercase())),
             sold_amount: dec!(5),
             bought_amount: dec!(20000),
-            pf: init_pf,
+            cost_basis: init_pf,
         };
 
         let new_pf = calculate_cost_basis(&mut tx, current_pf);
@@ -256,6 +261,7 @@ mod tests {
 
         let mut tx = Transaction::Trade {
             tx: TransactionBase {
+                id: "test".to_string(),
                 fee: None,
                 fee_price: None,
                 timestamp: Utc::now(),
@@ -271,7 +277,7 @@ mod tests {
             exchange_pair: Some(("BTC".to_string(), "EUR".to_uppercase())),
             sold_amount: dec!(1),
             bought_amount: dec!(450),
-            pf: init_pf,
+            cost_basis: init_pf,
         };
 
         let mut new_pf = calculate_cost_basis(&mut tx, current_pf);
@@ -290,6 +296,7 @@ mod tests {
 
         let mut tx2 = Transaction::Trade {
             tx: TransactionBase {
+                id: "test2".to_string(),
                 fee: None,
                 fee_price: None,
                 timestamp: Utc::now(),
@@ -305,7 +312,7 @@ mod tests {
             exchange_pair: None,
             sold_amount: dec!(1),
             bought_amount: dec!(1300),
-            pf: init_pf2,
+            cost_basis: init_pf2,
         };
 
         let new_pf2 = calculate_cost_basis(&mut tx2, new_pf);

@@ -1,8 +1,6 @@
-use std::{
-    collections::HashMap,
-    fs::{self, File},
-    path::Path,
-};
+use std::
+    fs::File
+;
 
 use rmp_serde::Serializer;
 use serde::Serialize;
@@ -15,8 +13,7 @@ use crate::{
     errors::IoError,
     structs::{
         transaction::Transaction,
-        wallet::{Wallet, WalletIdMap},
-        wallet_manager::{self, WalletManager},
+        wallet_manager::WalletManager,
     },
     utils::{create_directories_if_needed, file_exists},
 };
