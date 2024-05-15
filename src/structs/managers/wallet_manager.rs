@@ -1,17 +1,16 @@
-use std::{collections::HashMap, fs::File};
+use std::fs::File;
 
+
+use hashbrown::HashMap;
 use rmp_serde::Serializer;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    errors::IoError,
-    utils::{create_directories_if_needed, file_exists},
+    errors::IoError, structs::{Wallet, WalletIdMap}, utils::{create_directories_if_needed, file_exists}
 };
 
-use super::wallet::{Wallet, WalletIdMap};
-
 /* This wallet manager will handle saving the data and loading the previous data if they exist.
-It will implement de Drop trait to save */
+It will implement de Drop trait to save.*/
 #[derive(Serialize, Deserialize)]
 pub struct WalletManager {
     pub wallets: HashMap<String, Wallet>,

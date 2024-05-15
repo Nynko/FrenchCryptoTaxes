@@ -1,10 +1,12 @@
-use crate::structs::{CurrentCostBasis, Transaction, TransactionBase};
+use crate::structs::{GlobalCostBasis, TradeType, Transaction, TransactionBase};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 
 /* Calculate the french "plus-value" to fill the form 2086
 
 plus_value =  prix_cession - (acquisition_pf_net * prix_cession / valeur_pf )
+
+The transaction must be taxable, otherwise it will panic !
 */
 pub fn calculate_tax_gains(tx: Transaction) -> Decimal {
     match tx {
@@ -33,7 +35,7 @@ pub fn calculate_tax_gains(tx: Transaction) -> Decimal {
 
 pub fn _calculate_tax(
     sell_price: Decimal,
-    pf: &CurrentCostBasis,
+    pf: &GlobalCostBasis,
     pf_total_value: Decimal,
 ) -> Decimal {
     return sell_price - calculate_weigted_price(sell_price, pf.pf_cost_basis, pf_total_value);
@@ -51,8 +53,8 @@ pub fn calculate_weigted_price(
 /* Calculate the cost_basis, here "acquisition_pf_net" */
 pub fn calculate_cost_basis(
     tx: &mut Transaction,
-    current_pf: CurrentCostBasis,
-) -> CurrentCostBasis {
+    current_pf: GlobalCostBasis,
+) -> GlobalCostBasis {
     match tx {
         Transaction::Transfer {
             tx,
@@ -72,10 +74,15 @@ pub fn calculate_cost_basis(
             exchange_pair: _,
             sold_amount: _,
             bought_amount,
+            trade_type,
             cost_basis: pf,
         } => {
-            pf.pf_cost_basis = current_pf.pf_cost_basis;
-            pf.pf_total_cost = current_pf.pf_total_cost;
+            let added_cost = match trade_type{
+                TradeType::FiatToCrypto { local_cost_basis } => *local_cost_basis,
+                _ => dec!(0)
+            };
+            pf.pf_cost_basis = current_pf.pf_cost_basis + added_cost;
+            pf.pf_total_cost = current_pf.pf_total_cost + added_cost;
             return calculate_new_cost_basis(tx, &pf, *bought_amount);
         }
         _ => current_pf, // ignoring the fiat deposit and withdrawal as they don't change the cost basis, they are here for accounting
@@ -85,9 +92,9 @@ pub fn calculate_cost_basis(
 /* Calculate new Portfolio: if the transaction is taxable the new cost basis will change, otherwise only the fee might change it */
 fn calculate_new_cost_basis(
     tx: &TransactionBase,
-    current_pf: &CurrentCostBasis,
+    current_pf: &GlobalCostBasis,
     amount: Decimal,
-) -> CurrentCostBasis {
+) -> GlobalCostBasis {
     let current_cost_basis = current_pf.pf_cost_basis;
     let current_total_cost = current_pf.pf_total_cost;
 
@@ -109,7 +116,7 @@ fn calculate_new_cost_basis(
         }
     }
 
-    return CurrentCostBasis {
+    return GlobalCostBasis {
         pf_cost_basis: current_cost_basis - cost_basis_adjustment + fee,
         pf_total_cost: current_total_cost + fee,
     };
@@ -126,8 +133,8 @@ mod tests {
 
     use super::calculate_cost_basis;
 
-    fn get_pf(cost_basis: Decimal, total_cost: Decimal) -> CurrentCostBasis {
-        return CurrentCostBasis {
+    fn get_pf(cost_basis: Decimal, total_cost: Decimal) -> GlobalCostBasis {
+        return GlobalCostBasis {
             pf_cost_basis: cost_basis,
             pf_total_cost: total_cost,
         };
@@ -142,7 +149,6 @@ mod tests {
             owner: Owner::User,
             balance: dec!(0),
             info: None,
-            cost_basis: dec!(0),
         });
 
         let eur = Wallet::Fiat(WalletBase {
@@ -152,8 +158,7 @@ mod tests {
             address: None,
             owner: Owner::User,
             balance: dec!(0),
-            info: None,
-            cost_basis: dec!(0)
+            info: None
         });
 
         let eth = Wallet::Crypto(WalletBase {
@@ -163,8 +168,7 @@ mod tests {
             address: None,
             owner: Owner::User,
             balance: dec!(0),
-            info: None,
-            cost_basis: dec!(0)
+            info: None
         });
 
         (btc, eur, eth)
@@ -182,7 +186,7 @@ mod tests {
         let fee = dec!(0.001);
         let fee_eur = fee * price_eur_btc;
 
-        let init_pf = CurrentCostBasis {
+        let init_pf = GlobalCostBasis {
             pf_cost_basis: dec!(0),
             pf_total_cost: dec!(0),
         };
@@ -213,7 +217,7 @@ mod tests {
         let platform: &str = "Binance";
         let (btc_wallet, eur_wallet, _eth_wallet) = create_wallets();
 
-        let init_pf = CurrentCostBasis {
+        let init_pf = GlobalCostBasis {
             pf_cost_basis: dec!(0),
             pf_total_cost: dec!(0),
         };
@@ -236,6 +240,7 @@ mod tests {
             exchange_pair: Some(("BTC".to_string(), "EUR".to_uppercase())),
             sold_amount: dec!(5),
             bought_amount: dec!(20000),
+            trade_type: TradeType::CryptoToFiat,
             cost_basis: init_pf,
         };
 
@@ -250,14 +255,33 @@ mod tests {
 
     #[test]
     fn simple_two_trades() {
-        let current_pf = get_pf(dec!(1000), dec!(1000));
+        // let current_pf = get_pf(dec!(1000), dec!(1000));
         let platform: &str = "Binance";
         let (btc_wallet, eur_wallet, _eth_wallet) = create_wallets();
 
-        let init_pf = CurrentCostBasis {
+        let init_pf = GlobalCostBasis {
             pf_cost_basis: dec!(0),
             pf_total_cost: dec!(0),
         };
+
+        let mut tx0 = Transaction::Trade {
+            tx: TransactionBase {
+                id: "test0".to_string(),
+                fee: None,
+                fee_price: None,
+                timestamp: Utc::now(),
+                taxable: None,
+            },
+            from: eur_wallet.get_id(),
+            to: btc_wallet.get_id(),
+            exchange_pair: Some(("BTC".to_string(), "EUR".to_uppercase())),
+            sold_amount: dec!(1),
+            bought_amount: dec!(450),
+            trade_type: TradeType::FiatToCrypto { local_cost_basis: dec!(1000) },
+            cost_basis: init_pf.clone(),
+        };
+
+        let mut current_pf = calculate_cost_basis(&mut tx0, init_pf.clone());
 
         let mut tx = Transaction::Trade {
             tx: TransactionBase {
@@ -277,7 +301,8 @@ mod tests {
             exchange_pair: Some(("BTC".to_string(), "EUR".to_uppercase())),
             sold_amount: dec!(1),
             bought_amount: dec!(450),
-            cost_basis: init_pf,
+            trade_type: TradeType::CryptoToFiat,
+            cost_basis: init_pf.clone(),
         };
 
         let mut new_pf = calculate_cost_basis(&mut tx, current_pf);
@@ -289,7 +314,7 @@ mod tests {
         assert_eq!(gains, dec!(75));
 
         // Price update
-        let init_pf2 = CurrentCostBasis {
+        let init_pf2 = GlobalCostBasis {
             pf_cost_basis: dec!(0),
             pf_total_cost: dec!(0),
         };
@@ -312,6 +337,7 @@ mod tests {
             exchange_pair: None,
             sold_amount: dec!(1),
             bought_amount: dec!(1300),
+            trade_type: TradeType::CryptoToFiat,
             cost_basis: init_pf2,
         };
 

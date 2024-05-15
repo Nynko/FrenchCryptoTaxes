@@ -8,13 +8,13 @@ use reqwest::{
 use serde::Deserialize;
 use sha2::{Digest, Sha256, Sha512};
 use std::{
-    collections::{HashMap, HashSet},
     env,
     time::Duration,
 };
+use hashbrown::{HashMap, HashSet};
 use tokio::time::sleep;
 
-use crate::errors::{ApiError, MappingError};
+use crate::errors::ApiError;
 const API_KRAKEN_ENDPOINT: &str = "https://api.kraken.com";
 
 /* As per documentation signature is HMAC-SHA512 of (URI path + SHA256(nonce + POST data)) and base64 decoded secret API key.
@@ -333,8 +333,8 @@ pub async fn fetch_history_kraken(
     let api_key = env::var("KRAKEN_KEY").expect("KRAKEN_KEY not set in .env file");
     let api_secret: String =
         env::var("KRAKEN_SECRET").expect("KRAKEN_SECRET not set in .env file");
-    let mut api_counter: u8 = 0; // Counter limit to 15 then need to wait apprx 6s with decay of -0.33/s see https://docs.kraken.com/api/docs/guides/spot-rest-ratelimits
-                                 // let sleep_time
+    let mut api_counter: u8 = 0; // Counter limit depending on Tier:  see https://docs.kraken.com/api/docs/guides/spot-rest-ratelimits
+
     let ledger_history: Vec<LedgerHistory> =
         fetch_ledger_data(&api_key, &api_secret, &mut api_counter, &tier).await?;
     let trade_history: HashMap<String, TradeInfo> =

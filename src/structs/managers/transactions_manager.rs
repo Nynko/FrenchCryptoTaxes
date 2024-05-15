@@ -1,16 +1,14 @@
-use std::{collections::HashSet, fs::File};
+use std::fs::File;
+use hashbrown::HashSet;
 
 use rmp_serde::Serializer;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    errors::IoError,
-    utils::{create_directories_if_needed, file_exists},
+    errors::IoError, structs::{Transaction, TransactionId}, utils::{create_directories_if_needed, file_exists}
 };
 
-use super::transaction::Transaction;
 
-type TransactionId = String;
 /* This transaction manager will handle saving the data and loading the previous data if they exist, the merging
 of data and it will implement de Drop trait to save when reference is dropped */
 #[derive(Serialize, Deserialize)]
@@ -99,7 +97,7 @@ mod tests {
     use rust_decimal_macros::dec;
     use serial_test::serial;
 
-    use crate::structs::{wallet::Platform, CurrentCostBasis, Taxable, TransactionBase};
+    use crate::{api::Trade, structs::{wallet::Platform, GlobalCostBasis, Taxable, TradeType, TransactionBase}};
 
     use super::*;
 
@@ -127,7 +125,8 @@ mod tests {
             exchange_pair: None,
             sold_amount: dec!(1),
             bought_amount: dec!(1300),
-            cost_basis: CurrentCostBasis{
+            trade_type: TradeType::CryptoToFiat,
+            cost_basis: GlobalCostBasis{
                 pf_cost_basis: dec!(0),
                 pf_total_cost: dec!(0),
             },
@@ -146,7 +145,8 @@ mod tests {
             exchange_pair: None,
             sold_amount: dec!(1),
             bought_amount: dec!(1300),
-            cost_basis: CurrentCostBasis{
+            trade_type: TradeType::CryptoToFiat,
+            cost_basis: GlobalCostBasis{
                 pf_cost_basis: dec!(0),
                 pf_total_cost: dec!(0),
             },
@@ -189,7 +189,8 @@ mod tests {
             exchange_pair: None,
             sold_amount: dec!(1),
             bought_amount: dec!(1300),
-            cost_basis: CurrentCostBasis{
+            trade_type: TradeType::CryptoToFiat,
+            cost_basis: GlobalCostBasis{
                 pf_cost_basis: dec!(0),
                 pf_total_cost: dec!(0),
             },
@@ -208,7 +209,8 @@ mod tests {
             exchange_pair: None,
             sold_amount: dec!(1),
             bought_amount: dec!(1300),
-            cost_basis: CurrentCostBasis{
+            trade_type: TradeType::CryptoToFiat,
+            cost_basis: GlobalCostBasis{
                 pf_cost_basis: dec!(0),
                 pf_total_cost: dec!(0),
             },

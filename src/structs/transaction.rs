@@ -1,8 +1,7 @@
-use super::{CurrentCostBasis, Wallet};
+use super::{GlobalCostBasis, Wallet, WalletId};
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use core::hash::Hash;
 
 /* A Transaction correspond to an exchange: Crypto or Fiat
 A transaction can be "taxable" meaning it is either a Crypto -> Fiat transaction, or a Crypto Payment.
@@ -28,12 +27,12 @@ Deposit: should never be from the same wallet, there is always an "external" wal
          Deposits are only available from Fiat Wallet
 */
 
-type WalletId = String;
 
+pub type TransactionId = String;
 /* We only have two types of transactions here:
 
 A simple fee would be a transfer transaction to a wallet not owned by the user*/
-#[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum Transaction {
     // Transfer can be a "local" non taxable transfer, it can be a taxable transfer to external entity
     Transfer {
@@ -41,7 +40,7 @@ pub enum Transaction {
         from: WalletId,
         to: WalletId,
         amount: Decimal,
-        cost_basis: CurrentCostBasis,
+        cost_basis: GlobalCostBasis,
     },
     // Trade can be a Crypto/Crypto non taxable trade, or taxable sold of Crypto, or non taxable event: buying crypto
     Trade {
@@ -51,7 +50,8 @@ pub enum Transaction {
         exchange_pair: Option<(String, String)>,
         sold_amount: Decimal,
         bought_amount: Decimal,
-        cost_basis: CurrentCostBasis,
+        trade_type: TradeType,
+        cost_basis: GlobalCostBasis,
     },
     Deposit {
         tx: TransactionBase,
@@ -65,11 +65,25 @@ pub enum Transaction {
     }, // Fiat only
 }
 
+/* The Trade type: 
+If FiatToCrypto :  Representation of the transaction cost basis.
+This is used to calculate the global cost basis when iteratively treating the data.
+*/
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub enum TradeType {
+    FiatToCrypto {
+        local_cost_basis: Decimal,
+    },
+    CryptoToFiat,
+    CryptoToCrypto,
+}
+
+
 /*The pf_total_value should be set depending on the global value of the portfolio before each transaction (at least each taxable one).
 It can be caculated from the price of all wallets at an instant t.
 The issue is getting price at instant t may take time (calling API). We want to get that information before actually treating the transaction,
 when we only want it for taxable events.*/
-#[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct Taxable {
     // Currently in EUR
     pub is_taxable: bool,
@@ -79,7 +93,7 @@ pub struct Taxable {
 }
 
 
-#[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionBase {
     pub id : String, // This should not be generated but come from an external source  OR if not possible deterministically created from "uniqueness" element of the transaction (timestamp, fee, wallet_ids...)
     pub fee: Option<Decimal>,

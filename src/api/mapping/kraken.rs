@@ -2,7 +2,7 @@ use chrono::{TimeZone, Utc};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use hashbrown::HashMap;
 
 use crate::{
     api::{
@@ -11,10 +11,7 @@ use crate::{
     },
     errors::MappingError,
     structs::{
-        transaction::Taxable,
-        wallet::{Owner, Platform, WalletBase},
-        wallet_manager::{self, WalletManager},
-        CurrentCostBasis, Transaction, TransactionBase, Wallet, WalletIdMap,
+        transaction::Taxable, wallet::{Owner, Platform, WalletBase}, wallet_manager::{self, WalletManager}, GlobalCostBasis, TradeType, Transaction, TransactionBase, Wallet, WalletIdMap
     },
     utils::{f64_to_datetime_utc, generate_id},
 };
@@ -90,6 +87,7 @@ pub async fn create_kraken_txs(
                 let fee = get_fee(first_fee, second_fee)?;
                 let mut fee_price: Option<Decimal> = None;
                 let mut taxable: Option<Taxable> = None;
+                let mut trade_type = TradeType::CryptoToCrypto;
                 if buy_currency == "ZEUR" {
                     fee_price = Some(sold_amount / bought_amount); // Price of in euro of the asset we sold
                     let bought_price_eur = dec!(1); // Because it is euro already
@@ -100,10 +98,13 @@ pub async fn create_kraken_txs(
                         pf_total_value: dec!(0),
                         is_pf_total_calculated: false,
                     });
+                    trade_type = TradeType::CryptoToFiat;
                 } else if sold_currency == "ZEUR" {
                     fee_price = Some(dec!(1));
+                    trade_type = TradeType::FiatToCrypto { local_cost_basis: sold_amount };
                 } else if FiatKraken::from_str(&buy_currency).is_some() {
                     let is_taxable = true;
+                    trade_type = TradeType::CryptoToFiat;
                     let time = buying.time;
                     if let Some(pair) = pairs
                         .get(&(pair.0.to_string(), String::from("ZEUR")))
@@ -138,6 +139,32 @@ pub async fn create_kraken_txs(
                     }
                 }
 
+                else if FiatKraken::from_str(&sold_currency).is_some(){
+                    let time = buying.time;
+                    if let Some(pair) = pairs
+                        .get(&(pair.0.to_string(), String::from("ZEUR")))
+                        .cloned()
+                    {
+                        let price = get_pair_price(time, pair.to_string()).await;
+                        trade_type = TradeType::FiatToCrypto { local_cost_basis: price };
+                    } else if let Some(pair) = pairs
+                        .get(&(pair.0.to_string(), String::from("XBT")))
+                        .cloned()
+                    // We use BTC, then EUR to get the price
+                    {
+                        let price_btc = get_pair_price(time, pair.to_string()).await;
+                        let price_btc_eur = get_pair_price(time, pair.to_string()).await;
+                        let bought_price_eur = price_btc * price_btc_eur;
+                        trade_type = TradeType::FiatToCrypto { local_cost_basis: bought_price_eur };
+                    } else {
+                        return Err(MappingError::new(format!(
+                            "Couldn't find price for pair {sold_currency}/{buy_currency}"
+                        )));
+                    }
+
+                   
+                } 
+
                 else{
                     let time = selling.time;
                     // We assume the fee is always in the first currency for now
@@ -161,7 +188,7 @@ pub async fn create_kraken_txs(
 
                 // We initialize to 0, I am currently too lazy to overthink if we can use an Option or not
                 // The cost_basis will be calculated later.
-                let cost_basis = CurrentCostBasis {
+                let cost_basis = GlobalCostBasis {
                     pf_cost_basis: dec!(0),
                     pf_total_cost: dec!(0),
                 };
@@ -178,6 +205,7 @@ pub async fn create_kraken_txs(
                     exchange_pair: Some((pair.0.clone(), pair.1.clone())),
                     sold_amount,
                     bought_amount,
+                    trade_type,
                     cost_basis,
                 };
                 txs.push(tx);
