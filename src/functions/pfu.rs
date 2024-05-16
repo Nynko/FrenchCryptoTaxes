@@ -12,7 +12,12 @@ pub fn calculate_tax_gains(tx: Transaction) -> Decimal {
     match tx {
         Transaction::Transfer {
             amount,
-            tx,
+            taxable,
+            cost_basis: pf,
+            ..
+        }
+        | Transaction::Trade {
+            bought_amount: amount,
             taxable,
             cost_basis: pf,
             ..
@@ -21,19 +26,6 @@ pub fn calculate_tax_gains(tx: Transaction) -> Decimal {
             let price = taxable.price_eur;
             let pf_total_value = taxable.pf_total_value;
             let sell_price: Decimal = Decimal::from(amount) * price;
-            return _calculate_tax(sell_price, &pf, pf_total_value);
-        }
-        Transaction::Trade {
-            bought_amount,
-            tx,
-            taxable,
-            cost_basis: pf,
-            ..
-        } => {
-            let taxable = taxable.unwrap();
-            let bought_price_eur = taxable.price_eur;
-            let pf_total_value = taxable.pf_total_value;
-            let sell_price: Decimal = Decimal::from(bought_amount) * bought_price_eur;
             return _calculate_tax(sell_price, &pf, pf_total_value);
         }
         _ => dec!(0),
@@ -107,7 +99,6 @@ fn calculate_new_cost_basis(
         dec!(0.00)
     };
     let mut cost_basis_adjustment: Decimal = dec!(0.00);
-    let mut pf_value_adjustment: Decimal = fee;
     if let Some(taxable) = taxable {
         if taxable.is_taxable {
             // Selling of Crypto - Taxable event
@@ -115,7 +106,6 @@ fn calculate_new_cost_basis(
             let weigted_price =
                 calculate_weigted_price(sell_price, current_cost_basis, taxable.pf_total_value);
             cost_basis_adjustment = weigted_price;
-            pf_value_adjustment = sell_price + fee
         }
     }
 
@@ -180,7 +170,6 @@ mod tests {
     #[test]
     fn simple_transfer_with_fee() {
         let current_pf = get_pf(dec!(500.00), dec!(500.00));
-        let platform = "Binance";
         let (btc_wallet, eur_wallet, eth_wallet) = create_wallets();
 
         let from = btc_wallet;
@@ -258,7 +247,6 @@ mod tests {
 
     #[test]
     fn simple_two_trades() {
-        // let current_pf = get_pf(dec!(1000), dec!(1000));
         let platform: &str = "Binance";
         let (btc_wallet, eur_wallet, _eth_wallet) = create_wallets();
 
