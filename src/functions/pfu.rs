@@ -1,4 +1,4 @@
-use crate::structs::{GlobalCostBasis, TradeType, Transaction, TransactionBase};
+use crate::structs::{GlobalCostBasis, Taxable, TradeType, Transaction, TransactionBase};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 
@@ -10,8 +10,14 @@ The transaction must be taxable, otherwise it will panic !
 */
 pub fn calculate_tax_gains(tx: Transaction) -> Decimal {
     match tx {
-        Transaction::Transfer { amount, tx, cost_basis: pf, .. } => {
-            let taxable = tx.taxable.unwrap();
+        Transaction::Transfer {
+            amount,
+            tx,
+            taxable,
+            cost_basis: pf,
+            ..
+        } => {
+            let taxable = taxable.unwrap();
             let price = taxable.price_eur;
             let pf_total_value = taxable.pf_total_value;
             let sell_price: Decimal = Decimal::from(amount) * price;
@@ -20,10 +26,11 @@ pub fn calculate_tax_gains(tx: Transaction) -> Decimal {
         Transaction::Trade {
             bought_amount,
             tx,
+            taxable,
             cost_basis: pf,
             ..
         } => {
-            let taxable = tx.taxable.unwrap();
+            let taxable = taxable.unwrap();
             let bought_price_eur = taxable.price_eur;
             let pf_total_value = taxable.pf_total_value;
             let sell_price: Decimal = Decimal::from(bought_amount) * bought_price_eur;
@@ -51,39 +58,34 @@ pub fn calculate_weigted_price(
 }
 
 /* Calculate the cost_basis, here "acquisition_pf_net" */
-pub fn calculate_cost_basis(
-    tx: &mut Transaction,
-    current_pf: GlobalCostBasis,
-) -> GlobalCostBasis {
+pub fn calculate_cost_basis(tx: &mut Transaction, current_pf: GlobalCostBasis) -> GlobalCostBasis {
     match tx {
         Transaction::Transfer {
             tx,
-            from: _,
-            to: _,
             amount,
+            taxable,
             cost_basis: pf,
+            ..
         } => {
             pf.pf_cost_basis = current_pf.pf_cost_basis;
             pf.pf_total_cost = current_pf.pf_total_cost;
-            return calculate_new_cost_basis(tx, &pf, *amount);
+            return calculate_new_cost_basis(tx, taxable, &pf, *amount);
         }
         Transaction::Trade {
             tx,
-            from: _,
-            to: _,
-            exchange_pair: _,
-            sold_amount: _,
             bought_amount,
             trade_type,
+            taxable,
             cost_basis: pf,
+            ..
         } => {
-            let added_cost = match trade_type{
+            let added_cost = match trade_type {
                 TradeType::FiatToCrypto { local_cost_basis } => *local_cost_basis,
-                _ => dec!(0)
+                _ => dec!(0),
             };
             pf.pf_cost_basis = current_pf.pf_cost_basis + added_cost;
             pf.pf_total_cost = current_pf.pf_total_cost + added_cost;
-            return calculate_new_cost_basis(tx, &pf, *bought_amount);
+            return calculate_new_cost_basis(tx, taxable, &pf, *bought_amount);
         }
         _ => current_pf, // ignoring the fiat deposit and withdrawal as they don't change the cost basis, they are here for accounting
     }
@@ -92,6 +94,7 @@ pub fn calculate_cost_basis(
 /* Calculate new Portfolio: if the transaction is taxable the new cost basis will change, otherwise only the fee might change it */
 fn calculate_new_cost_basis(
     tx: &TransactionBase,
+    taxable: &Option<Taxable>,
     current_pf: &GlobalCostBasis,
     amount: Decimal,
 ) -> GlobalCostBasis {
@@ -105,7 +108,7 @@ fn calculate_new_cost_basis(
     };
     let mut cost_basis_adjustment: Decimal = dec!(0.00);
     let mut pf_value_adjustment: Decimal = fee;
-    if let Some(taxable) = &tx.taxable {
+    if let Some(taxable) = taxable {
         if taxable.is_taxable {
             // Selling of Crypto - Taxable event
             let sell_price: Decimal = Decimal::from(amount) * taxable.price_eur;
@@ -158,7 +161,7 @@ mod tests {
             address: None,
             owner: Owner::User,
             balance: dec!(0),
-            info: None
+            info: None,
         });
 
         let eth = Wallet::Crypto(WalletBase {
@@ -168,7 +171,7 @@ mod tests {
             address: None,
             owner: Owner::User,
             balance: dec!(0),
-            info: None
+            info: None,
         });
 
         (btc, eur, eth)
@@ -197,11 +200,11 @@ mod tests {
                 fee: Some(fee),
                 fee_price: Some(price_eur_btc),
                 timestamp: Utc::now(),
-                taxable: None,
             },
             from: from.get_id(),
             to: from.get_id(),
             amount: dec!(1),
+            taxable: None,
             cost_basis: init_pf,
         };
 
@@ -228,12 +231,6 @@ mod tests {
                 fee: None,
                 fee_price: None,
                 timestamp: Utc::now(),
-                taxable: Some(Taxable {
-                    is_taxable: true,
-                    price_eur: dec!(1),
-                    pf_total_value: dec!(32000),
-                    is_pf_total_calculated: true,
-                }),
             },
             from: btc_wallet.get_id(),
             to: eur_wallet.get_id(),
@@ -241,6 +238,12 @@ mod tests {
             sold_amount: dec!(5),
             bought_amount: dec!(20000),
             trade_type: TradeType::CryptoToFiat,
+            taxable: Some(Taxable {
+                is_taxable: true,
+                price_eur: dec!(1),
+                pf_total_value: dec!(32000),
+                is_pf_total_calculated: true,
+            }),
             cost_basis: init_pf,
         };
 
@@ -270,14 +273,16 @@ mod tests {
                 fee: None,
                 fee_price: None,
                 timestamp: Utc::now(),
-                taxable: None,
             },
             from: eur_wallet.get_id(),
             to: btc_wallet.get_id(),
             exchange_pair: Some(("BTC".to_string(), "EUR".to_uppercase())),
             sold_amount: dec!(1),
             bought_amount: dec!(450),
-            trade_type: TradeType::FiatToCrypto { local_cost_basis: dec!(1000) },
+            trade_type: TradeType::FiatToCrypto {
+                local_cost_basis: dec!(1000),
+            },
+            taxable: None,
             cost_basis: init_pf.clone(),
         };
 
@@ -289,12 +294,6 @@ mod tests {
                 fee: None,
                 fee_price: None,
                 timestamp: Utc::now(),
-                taxable: Some(Taxable {
-                    is_taxable: true,
-                    price_eur: dec!(1),
-                    pf_total_value: dec!(1200),
-                    is_pf_total_calculated: true,
-                }),
             },
             from: btc_wallet.get_id(),
             to: eur_wallet.get_id(),
@@ -302,6 +301,12 @@ mod tests {
             sold_amount: dec!(1),
             bought_amount: dec!(450),
             trade_type: TradeType::CryptoToFiat,
+            taxable: Some(Taxable {
+                is_taxable: true,
+                price_eur: dec!(1),
+                pf_total_value: dec!(1200),
+                is_pf_total_calculated: true,
+            }),
             cost_basis: init_pf.clone(),
         };
 
@@ -325,12 +330,6 @@ mod tests {
                 fee: None,
                 fee_price: None,
                 timestamp: Utc::now(),
-                taxable: Some(Taxable {
-                    is_taxable: true,
-                    price_eur: dec!(1),
-                    pf_total_value: dec!(1300),
-                    is_pf_total_calculated: true,
-                }),
             },
             from: btc_wallet.get_id(),
             to: eur_wallet.get_id(),
@@ -338,6 +337,12 @@ mod tests {
             sold_amount: dec!(1),
             bought_amount: dec!(1300),
             trade_type: TradeType::CryptoToFiat,
+            taxable: Some(Taxable {
+                is_taxable: true,
+                price_eur: dec!(1),
+                pf_total_value: dec!(1300),
+                is_pf_total_calculated: true,
+            }),
             cost_basis: init_pf2,
         };
 

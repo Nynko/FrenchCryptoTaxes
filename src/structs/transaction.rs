@@ -27,7 +27,6 @@ Deposit: should never be from the same wallet, there is always an "external" wal
          Deposits are only available from Fiat Wallet
 */
 
-
 pub type TransactionId = String;
 /* We only have two types of transactions here:
 
@@ -40,6 +39,7 @@ pub enum Transaction {
         from: WalletId,
         to: WalletId,
         amount: Decimal,
+        taxable: Option<Taxable>,
         cost_basis: GlobalCostBasis,
     },
     // Trade can be a Crypto/Crypto non taxable trade, or taxable sold of Crypto, or non taxable event: buying crypto
@@ -51,6 +51,7 @@ pub enum Transaction {
         sold_amount: Decimal,
         bought_amount: Decimal,
         trade_type: TradeType,
+        taxable: Option<Taxable>,
         cost_basis: GlobalCostBasis,
     },
     Deposit {
@@ -65,19 +66,16 @@ pub enum Transaction {
     }, // Fiat only
 }
 
-/* The Trade type: 
+/* The Trade type:
 If FiatToCrypto :  Representation of the transaction cost basis.
 This is used to calculate the global cost basis when iteratively treating the data.
 */
 #[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum TradeType {
-    FiatToCrypto {
-        local_cost_basis: Decimal,
-    },
+    FiatToCrypto { local_cost_basis: Decimal },
     CryptoToFiat,
     CryptoToCrypto,
 }
-
 
 /*The pf_total_value should be set depending on the global value of the portfolio before each transaction (at least each taxable one).
 It can be caculated from the price of all wallets at an instant t.
@@ -92,13 +90,11 @@ pub struct Taxable {
     pub is_pf_total_calculated: bool, // Each time recalculation is needed, this should be set to false (Recalculation use the PortfolioManager)
 }
 
-
 #[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionBase {
-    pub id : String, // This should not be generated but come from an external source  OR if not possible deterministically created from "uniqueness" element of the transaction (timestamp, fee, wallet_ids...)
+    pub id: String, // This should not be generated but come from an external source  OR if not possible deterministically created from "uniqueness" element of the transaction (timestamp, fee, wallet_ids...)
     pub fee: Option<Decimal>,
     pub timestamp: DateTime<Utc>,
-    pub taxable: Option<Taxable>,
     pub fee_price: Option<Decimal>, // For now in EUR, think about creating a Price<Currency> or Price<T>
 }
 

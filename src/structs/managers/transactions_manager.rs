@@ -1,13 +1,14 @@
-use std::fs::File;
 use hashbrown::HashSet;
+use std::fs::File;
 
 use rmp_serde::Serializer;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    errors::IoError, structs::{Transaction, TransactionId}, utils::{create_directories_if_needed, file_exists}
+    errors::IoError,
+    structs::{Transaction, TransactionId},
+    utils::{create_directories_if_needed, file_exists},
 };
-
 
 /* This transaction manager will handle saving the data and loading the previous data if they exist, the merging
 of data and it will implement de Drop trait to save when reference is dropped */
@@ -35,7 +36,7 @@ impl TransactionManager {
         }
     }
 
-    pub fn get(&self)-> &Vec<Transaction>{
+    pub fn get(&self) -> &Vec<Transaction> {
         return &self.transactions;
     }
 
@@ -66,8 +67,14 @@ impl TransactionManager {
     pub fn push_update(&mut self, tx: Transaction) {
         if self.hash_set.insert(tx.get_tx_base().id.clone()) {
             self.transactions.push(tx);
-        } else{ // if the value is already there -> update
-            let index = self.transactions.binary_search_by_key(&tx.get_tx_base().timestamp,|trans| trans.get_tx_base().timestamp).unwrap();
+        } else {
+            // if the value is already there -> update
+            let index = self
+                .transactions
+                .binary_search_by_key(&tx.get_tx_base().timestamp, |trans| {
+                    trans.get_tx_base().timestamp
+                })
+                .unwrap();
             self.transactions[index] = tx;
         }
     }
@@ -78,7 +85,6 @@ impl TransactionManager {
             self.push_update(tx); // We could optimize using extend_slice until the first duplicate (hence most of the time it would extend by slice everything)
         }
     }
-
 }
 
 impl Drop for TransactionManager {
@@ -86,7 +92,6 @@ impl Drop for TransactionManager {
         let _save = self.save();
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -97,7 +102,10 @@ mod tests {
     use rust_decimal_macros::dec;
     use serial_test::serial;
 
-    use crate::{api::Trade, structs::{wallet::Platform, GlobalCostBasis, Taxable, TradeType, TransactionBase}};
+    use crate::{
+        api::Trade,
+        structs::{wallet::Platform, GlobalCostBasis, Taxable, TradeType, TransactionBase},
+    };
 
     use super::*;
 
@@ -107,18 +115,12 @@ mod tests {
     fn test_unicity() {
         let mut tx_manager = TransactionManager::new().unwrap();
 
-        let tx1 =  Transaction::Trade {
+        let tx1 = Transaction::Trade {
             tx: TransactionBase {
                 id: "test".to_string(),
                 fee: None,
                 fee_price: None,
                 timestamp: DateTime::from_timestamp(61, 0).unwrap(),
-                taxable: Some(Taxable {
-                    is_taxable: true,
-                    price_eur: dec!(1),
-                    pf_total_value: dec!(1300),
-                    is_pf_total_calculated: true,
-                }),
             },
             from: "btc".to_string(),
             to: "eur".to_string(),
@@ -126,19 +128,24 @@ mod tests {
             sold_amount: dec!(1),
             bought_amount: dec!(1300),
             trade_type: TradeType::CryptoToFiat,
-            cost_basis: GlobalCostBasis{
+            taxable: Some(Taxable {
+                is_taxable: true,
+                price_eur: dec!(1),
+                pf_total_value: dec!(1300),
+                is_pf_total_calculated: true,
+            }),
+            cost_basis: GlobalCostBasis {
                 pf_cost_basis: dec!(0),
                 pf_total_cost: dec!(0),
             },
         };
 
-        let tx2 =  Transaction::Trade {
+        let tx2 = Transaction::Trade {
             tx: TransactionBase {
                 id: "test".to_string(),
                 fee: None,
                 fee_price: None,
                 timestamp: DateTime::from_timestamp(61, 0).unwrap(),
-                taxable: None,
             },
             from: "btc".to_string(),
             to: "eur".to_string(),
@@ -146,24 +153,21 @@ mod tests {
             sold_amount: dec!(1),
             bought_amount: dec!(1300),
             trade_type: TradeType::CryptoToFiat,
-            cost_basis: GlobalCostBasis{
+            taxable: None,
+            cost_basis: GlobalCostBasis {
                 pf_cost_basis: dec!(0),
                 pf_total_cost: dec!(0),
             },
         };
 
-
-        assert_ne!(tx1,tx2);
-
+        assert_ne!(tx1, tx2);
 
         tx_manager.push(tx1.clone());
         tx_manager.push(tx2.clone());
 
         assert_eq!(tx_manager.transactions.len(), 1);
         assert_eq!(tx_manager.transactions[0], tx1);
-
     }
-
 
     #[test]
     #[serial]
@@ -171,18 +175,12 @@ mod tests {
     fn test_update() {
         let mut tx_manager = TransactionManager::new().unwrap();
 
-        let tx1 =  Transaction::Trade {
+        let tx1 = Transaction::Trade {
             tx: TransactionBase {
                 id: "test".to_string(),
                 fee: None,
                 fee_price: None,
                 timestamp: DateTime::from_timestamp(61, 0).unwrap(),
-                taxable: Some(Taxable {
-                    is_taxable: true,
-                    price_eur: dec!(1),
-                    pf_total_value: dec!(1300),
-                    is_pf_total_calculated: true,
-                }),
             },
             from: "btc".to_string(),
             to: "eur".to_string(),
@@ -190,19 +188,24 @@ mod tests {
             sold_amount: dec!(1),
             bought_amount: dec!(1300),
             trade_type: TradeType::CryptoToFiat,
-            cost_basis: GlobalCostBasis{
+            taxable: Some(Taxable {
+                is_taxable: true,
+                price_eur: dec!(1),
+                pf_total_value: dec!(1300),
+                is_pf_total_calculated: true,
+            }),
+            cost_basis: GlobalCostBasis {
                 pf_cost_basis: dec!(0),
                 pf_total_cost: dec!(0),
             },
         };
 
-        let tx2 =  Transaction::Trade {
+        let tx2 = Transaction::Trade {
             tx: TransactionBase {
                 id: "test".to_string(),
                 fee: None,
                 fee_price: None,
                 timestamp: DateTime::from_timestamp(61, 0).unwrap(),
-                taxable: None,
             },
             from: "btc".to_string(),
             to: "eur".to_string(),
@@ -210,23 +213,19 @@ mod tests {
             sold_amount: dec!(1),
             bought_amount: dec!(1300),
             trade_type: TradeType::CryptoToFiat,
-            cost_basis: GlobalCostBasis{
+            taxable: None,
+            cost_basis: GlobalCostBasis {
                 pf_cost_basis: dec!(0),
                 pf_total_cost: dec!(0),
             },
         };
 
-
-        assert_ne!(tx1,tx2);
-
+        assert_ne!(tx1, tx2);
 
         tx_manager.push_update(tx1.clone());
         tx_manager.push_update(tx2.clone());
 
         assert_eq!(tx_manager.transactions.len(), 1);
         assert_eq!(tx_manager.transactions[0], tx2);
-
     }
-
-   
 }
