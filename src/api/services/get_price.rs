@@ -15,12 +15,8 @@ pub async fn get_price_api(tx: &Transaction, wallet: &Wallet) -> Result<Decimal,
 
     match wallet.get().platform {
         crate::structs::Platform::Kraken => {
-            let sanitized_currency = sanitize_currency(currency);
-            let price = kraken_mapping::get_currency_price(
-                time.timestamp().to_string(),
-                sanitized_currency,
-            )
-            .await?;
+            let price =
+                kraken_mapping::get_currency_price(time.timestamp().to_string(), currency).await?;
             return Ok(price);
         }
         crate::structs::Platform::Binance => todo!(),

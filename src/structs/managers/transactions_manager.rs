@@ -1,5 +1,5 @@
 use hashbrown::HashSet;
-use std::fs::File;
+use std::fs::{self, File};
 
 use rmp_serde::Serializer;
 use serde::{Deserialize, Serialize};
@@ -16,20 +16,27 @@ of data and it will implement de Drop trait to save when reference is dropped */
 pub struct TransactionManager {
     transactions: Vec<Transaction>, // Suggestion: Implement a SortedVec maybe
     hash_set: HashSet<TransactionId>, // HashSet for merging Vec<String> and preventing duplicates, the ID must comes from external sources OR deterministically created from "uniqueness" element of the transaction
+    path: String,
 }
 
 impl TransactionManager {
     pub const PATH: &'static str = ".data/transactions";
 
-    pub fn new() -> Result<Self, IoError> {
+    pub fn new(path: Option<String>) -> Result<Self, IoError> {
         // Load wallets here or create empty Vec
-        if !file_exists(Self::PATH) {
+        let path = if path.is_some() {
+            path.unwrap()
+        } else {
+            Self::PATH.to_string()
+        };
+        if !file_exists(&path) {
             return Ok(Self {
                 transactions: Vec::new(),
                 hash_set: HashSet::new(),
+                path,
             });
         } else {
-            let file = File::open(Self::PATH).map_err(|e| IoError::new(e.to_string()))?;
+            let file = File::open(path).map_err(|e| IoError::new(e.to_string()))?;
             let deserialized_map: TransactionManager =
                 rmp_serde::from_read(file).map_err(|e| IoError::new(e.to_string()))?;
             return Ok(deserialized_map);
@@ -45,12 +52,19 @@ impl TransactionManager {
     }
 
     pub fn save(&self) -> Result<(), IoError> {
-        create_directories_if_needed(Self::PATH);
-        let file = File::create(Self::PATH).map_err(|e| IoError::new(e.to_string()))?;
+        create_directories_if_needed(&self.path);
+        let file = File::create(&self.path).map_err(|e| IoError::new(e.to_string()))?;
         let mut writer = Serializer::new(file);
         self.serialize(&mut writer)
             .map_err(|e| IoError::new(e.to_string()))?;
         return Ok(());
+    }
+
+    pub fn delete(&self) -> Result<(), IoError> {
+        if file_exists(&self.path) {
+            fs::remove_file(&self.path).map_err(|e| IoError::new(e.to_string()))?;
+        }
+        Ok(())
     }
 
     /* Add transaction by avoiding duplicates */
@@ -111,15 +125,17 @@ mod tests {
     use rust_decimal_macros::dec;
     use serial_test::serial;
 
-    use crate::structs::{wallet::Platform, GlobalCostBasis, Taxable, TradeType, TransactionBase};
+    use crate::structs::{
+        wallet::Platform, GlobalCostBasis, Taxable, TradeType, TransactionBase, WalletSnapshot,
+    };
 
     use super::*;
 
     #[test]
     #[serial]
-    #[ignore] // Ignored to avoid rewriting data. Only run it if you don't have data, or do a backup... I should implement a temporary backup later or use a mock.
     fn test_unicity() {
-        let mut tx_manager = TransactionManager::new().unwrap();
+        let mut tx_manager =
+            TransactionManager::new(Some(".data_test/transactions".to_string())).unwrap();
 
         let tx1 = Transaction::Trade {
             tx: TransactionBase {
@@ -128,8 +144,16 @@ mod tests {
                 fee_price: None,
                 timestamp: DateTime::from_timestamp(61, 0).unwrap(),
             },
-            from: "btc".to_string(),
-            to: "eur".to_string(),
+            from: WalletSnapshot {
+                id: "btc".to_string(),
+                balance: dec!(1),
+                price_eur: None,
+            },
+            to: WalletSnapshot {
+                id: "eur".to_string(),
+                balance: dec!(0),
+                price_eur: None,
+            },
             exchange_pair: None,
             sold_amount: dec!(1),
             bought_amount: dec!(1300),
@@ -153,8 +177,16 @@ mod tests {
                 fee_price: None,
                 timestamp: DateTime::from_timestamp(61, 0).unwrap(),
             },
-            from: "btc".to_string(),
-            to: "eur".to_string(),
+            from: WalletSnapshot {
+                id: "btc".to_string(),
+                balance: dec!(1),
+                price_eur: None,
+            },
+            to: WalletSnapshot {
+                id: "eur".to_string(),
+                balance: dec!(0),
+                price_eur: None,
+            },
             exchange_pair: None,
             sold_amount: dec!(1),
             bought_amount: dec!(1300),
@@ -173,13 +205,15 @@ mod tests {
 
         assert_eq!(tx_manager.transactions.len(), 1);
         assert_eq!(tx_manager.transactions[0], tx1);
+
+        tx_manager.delete();
     }
 
     #[test]
     #[serial]
-    #[ignore] // Ignored to avoid rewriting data. Only run it if you don't have data, or do a backup... I should implement a temporary backup later or use a mock.
     fn test_update() {
-        let mut tx_manager = TransactionManager::new().unwrap();
+        let mut tx_manager =
+            TransactionManager::new(Some(".data_test/transactions2".to_string())).unwrap();
 
         let tx1 = Transaction::Trade {
             tx: TransactionBase {
@@ -188,8 +222,16 @@ mod tests {
                 fee_price: None,
                 timestamp: DateTime::from_timestamp(61, 0).unwrap(),
             },
-            from: "btc".to_string(),
-            to: "eur".to_string(),
+            from: WalletSnapshot {
+                id: "btc".to_string(),
+                balance: dec!(1),
+                price_eur: None,
+            },
+            to: WalletSnapshot {
+                id: "eur".to_string(),
+                balance: dec!(0),
+                price_eur: None,
+            },
             exchange_pair: None,
             sold_amount: dec!(1),
             bought_amount: dec!(1300),
@@ -213,8 +255,16 @@ mod tests {
                 fee_price: None,
                 timestamp: DateTime::from_timestamp(61, 0).unwrap(),
             },
-            from: "btc".to_string(),
-            to: "eur".to_string(),
+            from: WalletSnapshot {
+                id: "btc".to_string(),
+                balance: dec!(1),
+                price_eur: None,
+            },
+            to: WalletSnapshot {
+                id: "eur".to_string(),
+                balance: dec!(0),
+                price_eur: None,
+            },
             exchange_pair: None,
             sold_amount: dec!(1),
             bought_amount: dec!(1300),

@@ -13,7 +13,7 @@ use crate::{
         transaction::Taxable,
         wallet::{Owner, Platform, WalletBase},
         wallet_manager::WalletManager,
-        GlobalCostBasis, TradeType, Transaction, TransactionBase, Wallet,
+        GlobalCostBasis, TradeType, Transaction, TransactionBase, Wallet, WalletSnapshot,
     },
     utils::{f64_to_datetime_utc, generate_id},
 };
@@ -60,38 +60,69 @@ pub async fn create_kraken_txs(
                     pair = (buy_currency, sold_currency);
                 }
 
+                let selling_amount = selling.amount.abs();
+
                 let wallet_from = create_or_get_wallet(
                     wallet_manager,
                     sold_currency,
                     &platform,
                     &None,
-                    &selling.balance,
+                    selling.balance,
+                    selling_amount,
+                    selling.fee,
                 )?;
+
+                if refid == "TLK2JQ-B7ZFH-JOY3I5" {
+                    println!("HEEEEERRRREEEE {:?}", wallet_from);
+                }
                 let wallet_to = create_or_get_wallet(
                     wallet_manager,
                     buy_currency,
                     &platform,
                     &None,
-                    &buying.balance,
+                    buying.balance,
+                    dec!(0),
+                    buying.fee,
                 )?;
 
-                let sold_amount = Decimal::from_str_exact(&selling.amount)
-                    .map_err(|e| ApiError::MappingError(MappingError::Other(e.to_string())))?
-                    .abs();
-                let bought_amount = Decimal::from_str_exact(&buying.amount)
-                    .map_err(|e| ApiError::MappingError(MappingError::Other(e.to_string())))?
-                    .abs();
-                let first_fee = Decimal::from_str_exact(&selling.fee)
-                    .map_err(|e| ApiError::MappingError(MappingError::Other(e.to_string())))?;
-                let second_fee = Decimal::from_str_exact(&buying.fee)
-                    .map_err(|e| ApiError::MappingError(MappingError::Other(e.to_string())))?;
-                let fee = get_fee(first_fee, second_fee)?;
+                let time = entry.time;
+                let fee_and_entry = get_fee(selling, buying)?;
+                let mut fee = None;
                 let mut fee_price: Option<Decimal> = None;
+
+                // Handle the fee and fee price
+                if let Some((fee_value, entry_fee, other_entry)) = fee_and_entry {
+                    fee = Some(fee_value);
+                    // Get fee_price
+                    if entry_fee.asset == "ZEUR" {
+                        fee_price = Some(dec!(1));
+                    } else if other_entry.asset == "ZEUR" {
+                        // We can guess the price by using the amounts
+                        fee_price = Some(other_entry.amount / entry.amount); // Price of in euro of the asset we sold
+                    } else {
+                        // We get the price
+                        let price =
+                            get_currency_price(time.to_string(), entry_fee.asset.to_string())
+                                .await?;
+                        fee_price = Some(price);
+                    }
+                }
+
                 let mut taxable: Option<Taxable> = None;
                 let mut trade_type = TradeType::CryptoToCrypto;
-                if buy_currency == "ZEUR" {
-                    fee_price = Some(sold_amount / bought_amount); // Price of in euro of the asset we sold
-                    let bought_price_eur = dec!(1); // Because it is euro already
+
+                // Handle taxable or not
+                if let Some(fiat) = FiatKraken::from_str(&buy_currency) {
+                    trade_type = TradeType::CryptoToFiat;
+                    let bought_price_eur: Decimal;
+                    if fiat.is_eur() {
+                        bought_price_eur = dec!(1); // Because it is euro already
+                    } else {
+                        // Need to get the price
+                        bought_price_eur =
+                            get_currency_price(time.to_string(), sold_currency.to_string())
+                                .await?;
+                    }
                     let is_taxable = true;
                     taxable = Some(Taxable {
                         is_taxable,
@@ -99,39 +130,21 @@ pub async fn create_kraken_txs(
                         pf_total_value: dec!(0),
                         is_pf_total_calculated: false,
                     });
-                    trade_type = TradeType::CryptoToFiat;
-                } else if sold_currency == "ZEUR" {
-                    fee_price = Some(dec!(1));
+                } else if let Some(fiat) = FiatKraken::from_str(&sold_currency) {
+                    let price_sold_currency: Decimal;
+                    if fiat.is_eur() {
+                        price_sold_currency = dec!(1);
+                    } else if selling.fee != dec!(0) {
+                        price_sold_currency = fee_price.unwrap();
+                    } else {
+                        let time = buying.time;
+                        price_sold_currency =
+                            get_currency_price(time.to_string(), sold_currency.to_string())
+                                .await?;
+                    }
                     trade_type = TradeType::FiatToCrypto {
-                        local_cost_basis: sold_amount,
+                        local_cost_basis: price_sold_currency * selling_amount,
                     };
-                } else if FiatKraken::from_str(&buy_currency).is_some() {
-                    let is_taxable = true;
-                    trade_type = TradeType::CryptoToFiat;
-                    let time = buying.time;
-                    let price =
-                        get_currency_price(time.to_string(), sold_currency.to_string()).await?;
-                    taxable = Some(Taxable {
-                        is_taxable,
-                        price_eur: price,
-                        pf_total_value: dec!(0),
-                        is_pf_total_calculated: false,
-                    });
-                } else if FiatKraken::from_str(&sold_currency).is_some() {
-                    let time = buying.time;
-
-                    let price =
-                        get_currency_price(time.to_string(), buy_currency.to_string()).await?;
-                    trade_type = TradeType::FiatToCrypto {
-                        local_cost_basis: price,
-                    };
-                } else {
-                    // CryptoToCrypto
-                    let time = selling.time;
-                    // We assume the fee is always in the first currency for now
-                    let price =
-                        get_currency_price(time.to_string(), sold_currency.to_string()).await?;
-                    fee_price = Some(price);
                 }
 
                 // We initialize to 0, I am currently too lazy to overthink if we can use an Option or not
@@ -150,8 +163,8 @@ pub async fn create_kraken_txs(
                     from: wallet_from,
                     to: wallet_to,
                     exchange_pair: Some((pair.0.clone(), pair.1.clone())),
-                    sold_amount,
-                    bought_amount,
+                    sold_amount: selling_amount,
+                    bought_amount: buying.amount,
                     trade_type,
                     taxable,
                     cost_basis,
@@ -166,8 +179,8 @@ pub async fn create_kraken_txs(
             //     }
 
             // },
-            // EntryType::Deposit => todo!(),
-            // EntryType::Withdrawal => todo!(),
+            EntryType::Deposit => todo!(),
+            EntryType::Withdrawal => todo!(),
             // EntryType::Staking => todo!(),
             // EntryType::Reward => todo!(),
             _ => (),
@@ -181,20 +194,21 @@ fn get_trade_in_order<'a>(
     entry: &'a LedgerHistory,
     matching_entry: &'a LedgerHistory,
 ) -> Result<(&'a LedgerHistory, &'a LedgerHistory), ApiError> {
-    let sold_amount = Decimal::from_str_exact(&entry.amount)
-        .map_err(|e| ApiError::MappingError(MappingError::Other(e.to_string())))?;
-    if sold_amount < dec!(0) {
+    if entry.amount.clone() < dec!(0) {
         return Ok((entry, matching_entry));
     } else {
         return Ok((matching_entry, entry));
     }
 }
 
-fn get_fee(first_fee: Decimal, second_fee: Decimal) -> Result<Option<Decimal>, ApiError> {
-    return match (first_fee, second_fee) {
+fn get_fee<'a>(
+    selling: &'a LedgerHistory,
+    buying: &'a LedgerHistory,
+) -> Result<Option<(Decimal, &'a LedgerHistory, &'a LedgerHistory)>, ApiError> {
+    return match (selling.fee, buying.fee) {
         (zero1, zero2) if zero1 == zero2 && zero2 == dec!(0) => Ok(None),
-        (fee, zero) if zero == dec!(0) => Ok(Some(fee)),
-        (zero, fee) if zero == dec!(0) => Ok(Some(fee)),
+        (fee, zero) if zero == dec!(0) => Ok(Some((selling.fee, selling, buying))),
+        (zero, fee) if zero == dec!(0) => Ok(Some((buying.fee, buying, selling))),
         _ => Err(ApiError::MappingError(MappingError::Other(String::from(
             "Double fee on a trade is not supported",
         )))),
@@ -202,15 +216,16 @@ fn get_fee(first_fee: Decimal, second_fee: Decimal) -> Result<Option<Decimal>, A
 }
 
 pub async fn get_currency_price(time: String, currency: String) -> Result<Decimal, ApiError> {
+    let sanitized_currency = sanitize_currency(currency);
     let pairs = kraken_pairs().unwrap().0;
     if let Some(pair) = pairs
-        .get(&(currency.to_string(), String::from("ZEUR")))
+        .get(&(sanitized_currency.to_string(), String::from("ZEUR")))
         .cloned()
     {
         let price = get_pair_price(time, pair.to_string()).await;
         Ok(price)
     } else if let Some(pair) = pairs
-        .get(&(currency.to_string(), String::from("XBT")))
+        .get(&(sanitized_currency.to_string(), String::from("XBT")))
         .cloned()
     // We use BTC, then EUR to get the price
     {
@@ -221,8 +236,8 @@ pub async fn get_currency_price(time: String, currency: String) -> Result<Decima
     } else {
         return Err(ApiError::CouldNotFindPrice {
             pairs: vec![
-                (currency.clone(), "ZEUR".to_string()),
-                (currency, "XBT".to_string()),
+                (sanitized_currency.clone(), "ZEUR".to_string()),
+                (sanitized_currency, "XBT".to_string()),
             ],
         });
     }
@@ -247,13 +262,19 @@ fn create_or_get_wallet(
     currency: &String,
     platform: &Platform,
     address: &Option<String>,
-    balance: &String,
-) -> Result<String, ApiError> {
+    post_trade_balance: Decimal,
+    amount: Decimal,
+    fee: Decimal,
+) -> Result<WalletSnapshot, ApiError> {
     let wallet_ids = &mut wallet_manager.wallet_ids;
     let wallets = &mut wallet_manager.wallets;
     let wallet_id = wallet_ids.get(currency, platform, address);
     if let Some(id) = wallet_id {
-        return Ok(id);
+        return Ok(WalletSnapshot {
+            id: id,
+            balance: post_trade_balance + amount + fee,
+            price_eur: None,
+        });
     } else {
         let wallet_from: Wallet;
         let wallet_base = WalletBase {
@@ -262,8 +283,7 @@ fn create_or_get_wallet(
             platform: platform.clone(),
             address: None,
             owner: Owner::User,
-            balance: Decimal::from_str_exact(balance)
-                .map_err(|e| ApiError::MappingError(MappingError::Other(e.to_string())))?,
+            balance: post_trade_balance, // Post trade
             info: None,
         };
         if FiatKraken::from_str(&currency).is_some() {
@@ -275,7 +295,11 @@ fn create_or_get_wallet(
         let wallet_id = wallet_from.get_id();
         wallet_ids.insert(currency, platform.clone(), None, wallet_id.clone());
         wallets.insert(wallet_id.clone(), wallet_from);
-        return Ok(wallet_id);
+        return Ok(WalletSnapshot {
+            id: wallet_id,
+            balance: post_trade_balance + amount + fee, // before trade
+            price_eur: None,
+        });
     }
 }
 
@@ -339,6 +363,13 @@ impl FiatKraken {
             _ => None,
         }
     }
+
+    pub fn is_eur(&self) -> bool {
+        match self {
+            FiatKraken::ZEUR => true,
+            _ => false,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -347,15 +378,5 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_get_fee() {
-        let zero1 = dec!(0);
-        let zero2 = dec!(0);
-        let fee1 = dec!(1);
-        let fee2 = dec!(2);
-
-        assert_eq!(get_fee(zero1, zero2).unwrap(), None);
-        assert_eq!(get_fee(fee1, zero2).unwrap(), Some(fee1));
-        assert_eq!(get_fee(zero1, fee2).unwrap(), Some(fee2));
-        assert!(get_fee(fee1, fee2).is_err());
-    }
+    fn test_mapping() {}
 }

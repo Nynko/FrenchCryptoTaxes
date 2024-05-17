@@ -1,12 +1,13 @@
 use std::fs::File;
 
-
 use hashbrown::HashMap;
 use rmp_serde::Serializer;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    errors::IoError, structs::{Wallet, WalletIdMap}, utils::{create_directories_if_needed, file_exists}
+    errors::IoError,
+    structs::{Wallet, WalletIdMap},
+    utils::{create_directories_if_needed, file_exists},
 };
 
 /* This wallet manager will handle saving the data and loading the previous data if they exist.
@@ -15,22 +16,29 @@ It will implement de Drop trait to save.*/
 pub struct WalletManager {
     pub wallets: HashMap<String, Wallet>,
     pub wallet_ids: WalletIdMap,
+    path: String,
 }
 
 impl WalletManager {
     pub const PATH: &'static str = ".data/wallets";
 
-    pub fn new() -> Result<Self, IoError> {
+    pub fn new(path: Option<String>) -> Result<Self, IoError> {
         // Load wallets here or create empty Vec
-        if !file_exists(Self::PATH) {
+        let path = if path.is_some() {
+            path.unwrap()
+        } else {
+            Self::PATH.to_string()
+        };
+        if !file_exists(&path) {
             return Ok(Self {
                 wallets: HashMap::new(),
                 wallet_ids: WalletIdMap {
                     ids: HashMap::new(),
                 },
+                path,
             });
         } else {
-            let file = File::open(Self::PATH).map_err(|e| IoError::new(e.to_string()))?;
+            let file = File::open(path).map_err(|e| IoError::new(e.to_string()))?;
             let deserialized_map: WalletManager =
                 rmp_serde::from_read(file).map_err(|e| IoError::new(e.to_string()))?;
             return Ok(deserialized_map);
@@ -38,8 +46,8 @@ impl WalletManager {
     }
 
     pub fn save(&self) -> Result<(), IoError> {
-        create_directories_if_needed(Self::PATH);
-        let file = File::create(Self::PATH).map_err(|e| IoError::new(e.to_string()))?;
+        create_directories_if_needed(&self.path);
+        let file = File::create(&self.path).map_err(|e| IoError::new(e.to_string()))?;
         let mut writer = Serializer::new(file);
         self.serialize(&mut writer)
             .map_err(|e| IoError::new(e.to_string()))?;
@@ -56,8 +64,6 @@ impl Drop for WalletManager {
 #[cfg(test)]
 mod tests {
 
-    use std::{thread::sleep, time::Duration};
-
     use serial_test::serial;
 
     use crate::structs::wallet::Platform;
@@ -65,9 +71,9 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore] // Ignored to avoid rewriting data. Only run it if you don't have data, or do a backup... I should implement a temporary backup later or use a mock.
     fn test_save() {
-        let mut wallet_manager = WalletManager::new().unwrap();
+        let mut wallet_manager =
+            WalletManager::new(Some(".data_test/wallet".to_string())).unwrap();
 
         wallet_manager.wallet_ids.ids.insert(
             ("test".to_string(), Platform::Binance, None),
@@ -76,7 +82,7 @@ mod tests {
 
         wallet_manager.save().unwrap();
 
-        let wallet_manager2 = WalletManager::new().unwrap();
+        let wallet_manager2 = WalletManager::new(Some(".data_test/wallet".to_string())).unwrap();
 
         assert_eq!(
             wallet_manager2
@@ -87,10 +93,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_drop() {
         {
-            let mut wallet_manager = WalletManager::new().unwrap();
+            let mut wallet_manager =
+                WalletManager::new(Some(".data_test/wallet_drop".to_string())).unwrap();
 
             wallet_manager.wallet_ids.ids.insert(
                 ("test2".to_string(), Platform::Binance, None),
@@ -98,8 +104,8 @@ mod tests {
             );
         }
 
-        sleep(Duration::new(1, 0));
-        let wallet_manager = WalletManager::new().unwrap();
+        let wallet_manager =
+            WalletManager::new(Some(".data_test/wallet_drop".to_string())).unwrap();
 
         assert_eq!(
             wallet_manager
@@ -110,11 +116,11 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     #[should_panic]
     #[serial]
     fn test_drop_after_panic() {
-        let mut wallet_manager = WalletManager::new().unwrap();
+        let mut wallet_manager =
+            WalletManager::new(Some(".data_test/wallet_drop_panic".to_string())).unwrap();
         wallet_manager.wallet_ids.ids.insert(
             ("test3".to_string(), Platform::Binance, None),
             "test3".to_string(),
@@ -123,11 +129,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
-    #[should_panic]
     #[serial]
     fn test_drop_after_panic_part2() {
-        let wallet_manager = WalletManager::new().unwrap();
+        let wallet_manager =
+            WalletManager::new(Some(".data_test/wallet_drop_panic".to_string())).unwrap();
         assert_eq!(
             wallet_manager
                 .wallet_ids

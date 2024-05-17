@@ -1,4 +1,4 @@
-use super::{GlobalCostBasis, Wallet, WalletId};
+use super::{GlobalCostBasis, Wallet, WalletId, WalletSnapshot};
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -36,8 +36,8 @@ pub enum Transaction {
     // Transfer can be a "local" non taxable transfer, it can be a taxable transfer to external entity
     Transfer {
         tx: TransactionBase,
-        from: WalletId,
-        to: WalletId,
+        from: WalletSnapshot,
+        to: WalletSnapshot,
         amount: Decimal,
         taxable: Option<Taxable>,
         cost_basis: GlobalCostBasis,
@@ -45,8 +45,8 @@ pub enum Transaction {
     // Trade can be a Crypto/Crypto non taxable trade, or taxable sold of Crypto, or non taxable event: buying crypto
     Trade {
         tx: TransactionBase,
-        from: WalletId,
-        to: WalletId,
+        from: WalletSnapshot,
+        to: WalletSnapshot,
         exchange_pair: Option<(String, String)>,
         sold_amount: Decimal,
         bought_amount: Decimal,
@@ -56,12 +56,12 @@ pub enum Transaction {
     },
     Deposit {
         tx: TransactionBase,
-        to: WalletId,
+        to: WalletSnapshot,
         amount: Decimal,
     }, // Fiat only
     Withdrawal {
         tx: TransactionBase,
-        from: WalletId,
+        from: WalletSnapshot,
         amount: Decimal,
     }, // Fiat only
 }
@@ -121,12 +121,17 @@ impl Transaction {
         tx: TransactionBase,
         to: &Wallet,
         amount: Decimal,
+        price_eur: Option<Decimal>,
     ) -> Result<Self, &'static str> {
         // Ensure the wallet type is Fiat
         if let Wallet::Fiat(_) = to {
             Ok(Transaction::Deposit {
                 tx,
-                to: to.get().id.clone(),
+                to: WalletSnapshot {
+                    id: to.get().id.clone(),
+                    balance: amount,
+                    price_eur,
+                },
                 amount,
             })
         } else {
@@ -138,12 +143,17 @@ impl Transaction {
         tx: TransactionBase,
         from: &Wallet,
         amount: Decimal,
+        price_eur: Option<Decimal>,
     ) -> Result<Self, &'static str> {
         // Ensure the wallet type is Fiat
         if let Wallet::Fiat(_) = from {
             Ok(Transaction::Withdrawal {
                 tx,
-                from: from.get().id.clone(),
+                from: WalletSnapshot {
+                    id: from.get().id.clone(),
+                    balance: amount,
+                    price_eur,
+                },
                 amount,
             })
         } else {

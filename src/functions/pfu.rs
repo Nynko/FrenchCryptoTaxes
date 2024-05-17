@@ -8,7 +8,7 @@ plus_value =  prix_cession - (acquisition_pf_net * prix_cession / valeur_pf )
 
 The transaction must be taxable, otherwise it will panic !
 */
-pub fn calculate_tax_gains(tx: Transaction) -> Decimal {
+pub fn calculate_tax_gains(tx: &Transaction) -> Decimal {
     match tx {
         Transaction::Transfer {
             amount,
@@ -22,10 +22,10 @@ pub fn calculate_tax_gains(tx: Transaction) -> Decimal {
             cost_basis: pf,
             ..
         } => {
-            let taxable = taxable.unwrap();
+            let taxable = taxable.as_ref().unwrap();
             let price = taxable.price_eur;
             let pf_total_value = taxable.pf_total_value;
-            let sell_price: Decimal = Decimal::from(amount) * price;
+            let sell_price: Decimal = Decimal::from(*amount) * price;
             return _calculate_tax(sell_price, &pf, pf_total_value);
         }
         _ => dec!(0),
@@ -131,7 +131,7 @@ mod tests {
     use chrono::Utc;
 
     use crate::structs::transaction::Taxable;
-    use crate::structs::{Owner, Platform, Wallet, WalletBase};
+    use crate::structs::{Owner, Platform, Wallet, WalletBase, WalletSnapshot};
 
     use super::*;
 
@@ -183,8 +183,6 @@ mod tests {
         let current_pf = get_pf(dec!(500.00), dec!(500.00));
         let (btc_wallet, _eur_wallet, _eth_wallet) = create_wallets();
 
-        let from = btc_wallet;
-
         let price_eur_btc = dec!(64000.02);
         let fee = dec!(0.001);
         let fee_eur = fee * price_eur_btc;
@@ -201,8 +199,16 @@ mod tests {
                 fee_price: Some(price_eur_btc),
                 timestamp: Utc::now(),
             },
-            from: from.get_id(),
-            to: from.get_id(),
+            from: WalletSnapshot {
+                id: btc_wallet.get_id().to_string(),
+                balance: dec!(1),
+                price_eur: None,
+            },
+            to: WalletSnapshot {
+                id: btc_wallet.get_id().to_string(),
+                balance: dec!(1),
+                price_eur: None,
+            },
             amount: dec!(1),
             taxable: None,
             cost_basis: init_pf,
@@ -231,8 +237,16 @@ mod tests {
                 fee_price: None,
                 timestamp: Utc::now(),
             },
-            from: btc_wallet.get_id(),
-            to: eur_wallet.get_id(),
+            from: WalletSnapshot {
+                id: btc_wallet.get_id().to_string(),
+                balance: dec!(1),
+                price_eur: None,
+            },
+            to: WalletSnapshot {
+                id: eur_wallet.get_id().to_string(),
+                balance: dec!(1),
+                price_eur: None,
+            },
             exchange_pair: Some(("BTC".to_string(), "EUR".to_uppercase())),
             sold_amount: dec!(5),
             bought_amount: dec!(20000),
@@ -251,7 +265,7 @@ mod tests {
         assert_eq!(new_pf.pf_total_cost, dec!(18000));
         assert_eq!(new_pf.pf_cost_basis, dec!(18000) - dec!(11250));
 
-        let gains = calculate_tax_gains(tx);
+        let gains = calculate_tax_gains(&tx);
         assert_eq!(gains, dec!(8750));
     }
 
@@ -271,11 +285,19 @@ mod tests {
                 fee_price: None,
                 timestamp: Utc::now(),
             },
-            from: eur_wallet.get_id(),
-            to: btc_wallet.get_id(),
+            from: WalletSnapshot {
+                id: eur_wallet.get_id().to_string(),
+                balance: dec!(1000),
+                price_eur: None,
+            },
+            to: WalletSnapshot {
+                id: btc_wallet.get_id().to_string(),
+                balance: dec!(0),
+                price_eur: None,
+            },
             exchange_pair: Some(("BTC".to_string(), "EUR".to_uppercase())),
-            sold_amount: dec!(1),
-            bought_amount: dec!(450),
+            sold_amount: dec!(1000),
+            bought_amount: dec!(2),
             trade_type: TradeType::FiatToCrypto {
                 local_cost_basis: dec!(1000),
             },
@@ -292,8 +314,16 @@ mod tests {
                 fee_price: None,
                 timestamp: Utc::now(),
             },
-            from: btc_wallet.get_id(),
-            to: eur_wallet.get_id(),
+            from: WalletSnapshot {
+                id: btc_wallet.get_id().to_string(),
+                balance: dec!(2),
+                price_eur: None,
+            },
+            to: WalletSnapshot {
+                id: eur_wallet.get_id().to_string(),
+                balance: dec!(0),
+                price_eur: None,
+            },
             exchange_pair: Some(("BTC".to_string(), "EUR".to_uppercase())),
             sold_amount: dec!(1),
             bought_amount: dec!(450),
@@ -312,7 +342,7 @@ mod tests {
         assert_eq!(new_pf.pf_total_cost, dec!(1000));
         assert_eq!(new_pf.pf_cost_basis, dec!(1000) - dec!(375));
 
-        let gains = calculate_tax_gains(tx);
+        let gains = calculate_tax_gains(&tx);
         assert_eq!(gains, dec!(75));
 
         // Price update
@@ -328,8 +358,16 @@ mod tests {
                 fee_price: None,
                 timestamp: Utc::now(),
             },
-            from: btc_wallet.get_id(),
-            to: eur_wallet.get_id(),
+            from: WalletSnapshot {
+                id: btc_wallet.get_id().to_string(),
+                balance: dec!(1),
+                price_eur: None,
+            },
+            to: WalletSnapshot {
+                id: eur_wallet.get_id().to_string(),
+                balance: dec!(450),
+                price_eur: None,
+            },
             exchange_pair: None,
             sold_amount: dec!(1),
             bought_amount: dec!(1300),
@@ -349,7 +387,7 @@ mod tests {
 
         assert_eq!(new_pf2.pf_cost_basis, dec!(0));
 
-        let gains = calculate_tax_gains(tx2);
+        let gains = calculate_tax_gains(&tx2);
         assert_eq!(gains, dec!(675));
     }
 }

@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::fs::{self, File};
 
 use hashbrown::HashMap;
 use rmp_serde::Serializer;
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     api::get_price_api,
     errors::{IoError, PortfolioHistoryError},
-    structs::{Transaction, TransactionId, Wallet, WalletId},
+    structs::{Transaction, TransactionId, Wallet, WalletId, WalletSnapshot},
     utils::{create_directories_if_needed, file_exists},
 };
 
@@ -22,26 +22,26 @@ If only one wallet is added, then we only have to call one API for this specific
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PortfolioManager {
     pub portfolio_history: HashMap<TransactionId, HashMap<WalletId, WalletSnapshot>>, // We store only for taxable Transactions
-}
-
-/* Correspond to a snapshot of the wallet state (balance and potentially price) for a transaction */
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct WalletSnapshot {
-    pub balance: Decimal,
-    pub price_eur: Option<Decimal>,
+    path: String,
 }
 
 impl PortfolioManager {
     pub const PATH: &'static str = ".data/portfolio_history";
 
-    pub fn new() -> Result<Self, IoError> {
+    pub fn new(path: Option<String>) -> Result<Self, IoError> {
         // Load wallets here or create empty Vec
-        if !file_exists(Self::PATH) {
+        let path = if path.is_some() {
+            path.unwrap()
+        } else {
+            Self::PATH.to_string()
+        };
+        if !file_exists(&path) {
             return Ok(Self {
                 portfolio_history: HashMap::new(),
+                path,
             });
         } else {
-            let file = File::open(Self::PATH).map_err(|e| IoError::new(e.to_string()))?;
+            let file = File::open(path).map_err(|e| IoError::new(e.to_string()))?;
             let deserialized_map: PortfolioManager =
                 rmp_serde::from_read(file).map_err(|e| IoError::new(e.to_string()))?;
             return Ok(deserialized_map);
@@ -49,12 +49,19 @@ impl PortfolioManager {
     }
 
     pub fn save(&self) -> Result<(), IoError> {
-        create_directories_if_needed(Self::PATH);
-        let file = File::create(Self::PATH).map_err(|e| IoError::new(e.to_string()))?;
+        create_directories_if_needed(&self.path);
+        let file = File::create(&self.path).map_err(|e| IoError::new(e.to_string()))?;
         let mut writer = Serializer::new(file);
         self.serialize(&mut writer)
             .map_err(|e| IoError::new(e.to_string()))?;
         return Ok(());
+    }
+
+    pub fn delete(&self) -> Result<(), IoError> {
+        if file_exists(&self.path) {
+            fs::remove_file(&self.path).map_err(|e| IoError::new(e.to_string()))?;
+        }
+        Ok(())
     }
 
     #[tokio::main]
@@ -124,8 +131,10 @@ impl PortfolioManager {
                 bought_amount,
                 ..
             } => {
-                let from = wallets.get(from);
-                let to = wallets.get(to);
+                let from_wallet = wallets.get(&from.id);
+                let to_wallet = wallets.get(&to.id);
+
+                self.insert_balance_from_wallet(from_wallet, from, previous_state)?;
 
                 if taxable.as_ref().is_some_and(|tax| tax.is_taxable) {
                     // If taxable we need the price and to insert/update the history
@@ -135,8 +144,13 @@ impl PortfolioManager {
                     self.portfolio_history.insert(tx.id.clone(), new_state);
                 }
 
-                self.update_balance_from_wallet(from, sold_amount, tx.id.clone(), previous_state)?;
-                self.update_balance_to_wallet(to, bought_amount, previous_state);
+                self.update_balance_from_wallet(
+                    from_wallet,
+                    sold_amount,
+                    tx.id.clone(),
+                    previous_state,
+                )?;
+                self.update_balance_to_wallet(to_wallet, bought_amount, previous_state);
                 Ok(())
             }
             Transaction::Transfer {
@@ -147,6 +161,11 @@ impl PortfolioManager {
                 taxable,
                 ..
             } => {
+                let from_wallet = wallets.get(&from.id);
+                let to_wallet = wallets.get(&to.id);
+
+                self.insert_balance_from_wallet(from_wallet, from, previous_state)?;
+
                 if taxable.as_ref().is_some_and(|tax| tax.is_taxable) {
                     // If taxable we need the price and to insert/update the history
                     let new_state = self
@@ -155,15 +174,45 @@ impl PortfolioManager {
                     self.portfolio_history.insert(tx.id.clone(), new_state);
                 }
 
-                let from = wallets.get(from);
-                let to = wallets.get(to);
-                self.update_balance_from_wallet(from, amount, tx.id.clone(), previous_state)?;
-                self.update_balance_to_wallet(to, amount, previous_state);
+                self.update_balance_from_wallet(
+                    from_wallet,
+                    amount,
+                    tx.id.clone(),
+                    previous_state,
+                )?;
+                self.update_balance_to_wallet(to_wallet, amount, previous_state);
 
                 Ok(())
             }
             _ => Ok(()), // We don't need information when it is fiat
         }
+    }
+
+    fn insert_balance_from_wallet(
+        &self,
+        from: Option<&Wallet>,
+        from_snap: &WalletSnapshot,
+        previous_state: &mut HashMap<WalletId, WalletSnapshot>,
+    ) -> Result<(), PortfolioHistoryError> {
+        if let Some(Wallet::Crypto(base)) = from {
+            let previous_snap = previous_state.get_mut(&base.id);
+            if let Some(prev_snap) = previous_snap {
+                if (prev_snap.balance != from_snap.balance) {
+                    // return Err(PortfolioHistoryError::MismatchBetweenBalances {
+                    //     threshold: dec!(0),
+                    //     old_balance: prev_snap.balance,
+                    //     new_balance: from_snap.balance,
+                    // });
+                    println!(
+                        "Mismatch calculated balance: {} - balance from data {}",
+                        prev_snap.balance, from_snap.balance
+                    );
+                }
+            } else {
+                previous_state.insert(base.id.clone(), from_snap.clone());
+            }
+        }
+        Ok(())
     }
 
     fn update_balance_from_wallet(
@@ -175,16 +224,11 @@ impl PortfolioManager {
     ) -> Result<(), PortfolioHistoryError> {
         if let Some(Wallet::Crypto(base)) = from {
             let wallet_snap = previous_state.get_mut(&base.id);
-            if let Some(snap) = wallet_snap {
-                snap.balance -= amount;
-
-                if snap.balance == dec!(0) {
-                    // No need to keep the walletSnapshot if the balance is zero
-                    previous_state.remove(&base.id);
-                }
-            } else {
-                // We considere the wallet is either not ours or since we don't have information, we considere the wallet to be empty now.
-                println!("WARNING: Wallet {} is missing in tx: {tx_id}", base.id);
+            let snap = wallet_snap.unwrap(); // We added it before so it must exist
+            snap.balance -= amount;
+            if snap.balance == dec!(0) {
+                // No need to keep the walletSnapshot if the balance is zero
+                previous_state.remove(&base.id);
             }
         }
         Ok(())
@@ -204,6 +248,7 @@ impl PortfolioManager {
                 previous_state.insert(
                     base.id.clone(),
                     WalletSnapshot {
+                        id: base.id.to_string(),
                         balance: *amount,
                         price_eur: None,
                     },

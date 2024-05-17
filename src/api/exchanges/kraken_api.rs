@@ -6,7 +6,8 @@ use reqwest::{
     header::{HeaderMap, HeaderValue},
     Error,
 };
-use serde::Deserialize;
+use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256, Sha512};
 use std::{env, time::Duration};
 use tokio::time::sleep;
@@ -318,18 +319,15 @@ pub async fn fetch_assets_pair() -> Result<Response<AssetPairs>, ApiError> {
     return Ok(trade_response);
 }
 
+pub type HistoryResponse = (
+    Vec<LedgerHistory>,
+    HashMap<String, TradeInfo>,
+    HashMap<String, Deposit>,
+    HashMap<String, Withdrawal>,
+);
+
 #[tokio::main]
-pub async fn fetch_history_kraken(
-    tier: Tier,
-) -> Result<
-    (
-        Vec<LedgerHistory>,
-        HashMap<String, TradeInfo>,
-        HashMap<String, Deposit>,
-        HashMap<String, Withdrawal>,
-    ),
-    ApiError,
-> {
+pub async fn fetch_history_kraken(tier: Tier) -> Result<HistoryResponse, ApiError> {
     let api_key = env::var("KRAKEN_KEY").expect("KRAKEN_KEY not set in .env file");
     let api_secret: String =
         env::var("KRAKEN_SECRET").expect("KRAKEN_SECRET not set in .env file");
@@ -391,7 +389,7 @@ impl Tier {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct TradeEntry {
     pub price: String,
     pub volume: String,
@@ -402,13 +400,13 @@ pub struct TradeEntry {
     pub trade_id: u64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct TickData {
     #[serde(flatten)]
     pub trades: HashMap<String, Vec<TradeEntry>>,
     pub last: String,
 }
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct AssetPair {
     pub altname: String,
     pub wsname: String,
@@ -416,13 +414,13 @@ pub struct AssetPair {
     pub quote: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct AssetPairs {
     #[serde(flatten)]
     pub pairs: HashMap<String, AssetPair>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Deposit {
     pub method: String,
     pub network: Option<String>,
@@ -431,8 +429,8 @@ pub struct Deposit {
     pub refid: String,
     pub txid: String,
     pub info: Option<String>,
-    pub amount: String,
-    pub fee: String,
+    pub amount: Decimal,
+    pub fee: Decimal,
     pub time: i32,
     pub status: String,
     #[serde(rename = "status-prop")]
@@ -440,7 +438,7 @@ pub struct Deposit {
     pub originators: Option<Vec<String>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Withdrawal {
     pub method: String,
     pub network: Option<String>,
@@ -449,8 +447,8 @@ pub struct Withdrawal {
     pub refid: String,
     pub txid: String,
     pub info: Option<String>,
-    pub amount: String,
-    pub fee: String,
+    pub amount: Decimal,
+    pub fee: Decimal,
     pub time: i32,
     pub status: String,
     #[serde(rename = "status-prop")]
@@ -458,24 +456,24 @@ pub struct Withdrawal {
     pub key: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct DepositInfo {
     pub deposits: Option<Vec<Deposit>>,
     pub next_cursor: Option<String>,
 }
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct WithdrawalInfo {
     pub withdrawals: Option<Vec<Withdrawal>>,
     pub next_cursor: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Response<T> {
     pub error: Vec<String>,
     pub result: Option<T>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum EntryType {
     None,
@@ -501,7 +499,7 @@ pub enum EntryType {
     CustodyTransfer,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct LedgerHistory {
     pub refid: String,
     pub time: f64,
@@ -509,24 +507,24 @@ pub struct LedgerHistory {
     pub subtype: String,
     pub aclass: String,
     pub asset: String,
-    pub amount: String,
-    pub fee: String,
-    pub balance: String,
+    pub amount: Decimal,
+    pub fee: Decimal,
+    pub balance: Decimal,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct LedgersInfo {
     pub ledger: HashMap<String, LedgerHistory>,
     pub count: u32,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct TradeHistory {
     pub trades: HashMap<String, TradeInfo>,
     pub count: u32,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct TradeInfo {
     pub ordertxid: String,
     pub postxid: String,
@@ -536,7 +534,7 @@ pub struct TradeInfo {
     pub ordertype: String,
     pub price: String,
     pub cost: String,
-    pub fee: String,
+    pub fee: Decimal,
     pub vol: String,
     pub margin: String,
     pub misc: String,

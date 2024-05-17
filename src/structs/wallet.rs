@@ -118,10 +118,10 @@ pub struct WalletBase {
     pub info: Option<String>,
 }
 
-// /* Correspond to a snapshot of the wallet state (balance and potentially price) for a transaction */
-// #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-// pub struct WalletSnapshot {
-//     pub id: WalletId,
-//     pub balance: Decimal,
-//     pub price_eur: Option<Decimal>,
-// }
+/* Correspond to a snapshot of the wallet state (balance and potentially price) for a transaction */
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct WalletSnapshot {
+    pub id: WalletId,
+    pub balance: Decimal,
+    pub price_eur: Option<Decimal>,
+}
