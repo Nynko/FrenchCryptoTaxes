@@ -1,5 +1,6 @@
 use base64::prelude::*;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
+use hashbrown::{HashMap, HashSet};
 use hmac::{Hmac, Mac};
 use reqwest::{
     header::{HeaderMap, HeaderValue},
@@ -7,11 +8,7 @@ use reqwest::{
 };
 use serde::Deserialize;
 use sha2::{Digest, Sha256, Sha512};
-use std::{
-    env,
-    time::Duration,
-};
-use hashbrown::{HashMap, HashSet};
+use std::{env, time::Duration};
 use tokio::time::sleep;
 
 use crate::errors::ApiError;
@@ -98,10 +95,10 @@ async fn fetch_ledger_data(
     let ledger_response: Response<LedgersInfo> =
         fetch_data(&url_path, &mut params, &api_key, &api_secret)
             .await
-            .map_err(|e| ApiError::new(e.to_string()))?;
+            .map_err(|e| ApiError::ApiCallError(e.to_string()))?;
     *counter += 2;
     if !ledger_response.error.is_empty() {
-        return Err(ApiError::new(ledger_response.error.concat()));
+        return Err(ApiError::ApiCallError(ledger_response.error.concat()));
     }
     let mut count: u32 = 0;
     if let Some(result) = ledger_response.result {
@@ -121,10 +118,10 @@ async fn fetch_ledger_data(
         let response: Response<LedgersInfo> =
             fetch_data(&url_path, &mut params, &api_key, &api_secret)
                 .await
-                .map_err(|e| ApiError::new(e.to_string()))?;
+                .map_err(|e| ApiError::ApiCallError(e.to_string()))?;
         *counter += 2;
         if !response.error.is_empty() {
-            return Err(ApiError::new(response.error.concat()));
+            return Err(ApiError::ApiCallError(response.error.concat()));
         }
         if let Some(result) = response.result {
             for (key, entry) in result.ledger.iter() {
@@ -152,10 +149,10 @@ async fn fetch_trade_history(
     let trade_response: Response<TradeHistory> =
         fetch_data(&url_path, &mut params, &api_key, &api_secret)
             .await
-            .map_err(|e| ApiError::new(e.to_string()))?;
+            .map_err(|e| ApiError::ApiCallError(e.to_string()))?;
     *counter += 2;
     if !trade_response.error.is_empty() {
-        return Err(ApiError::new(trade_response.error.concat()));
+        return Err(ApiError::ApiCallError(trade_response.error.concat()));
     }
     let mut count: u32 = 0;
     if let Some(result) = trade_response.result {
@@ -171,10 +168,10 @@ async fn fetch_trade_history(
         let response: Response<TradeHistory> =
             fetch_data(&url_path, &mut params, &api_key, &api_secret)
                 .await
-                .map_err(|e| ApiError::new(e.to_string()))?;
+                .map_err(|e| ApiError::ApiCallError(e.to_string()))?;
         *counter += 2;
         if !response.error.is_empty() {
-            return Err(ApiError::new(response.error.concat()));
+            return Err(ApiError::ApiCallError(response.error.concat()));
         }
         if let Some(result) = response.result {
             trade_history.extend(result.trades);
@@ -204,11 +201,11 @@ async fn fetch_deposit_data(
         let deposit_response: Response<DepositInfo> =
             fetch_data(&url_path, &mut params, &api_key, &api_secret)
                 .await
-                .map_err(|e| ApiError::new(e.to_string()))?;
+                .map_err(|e| ApiError::ApiCallError(e.to_string()))?;
         *counter += 1;
 
         if !deposit_response.error.is_empty() {
-            return Err(ApiError::new(deposit_response.error.concat()));
+            return Err(ApiError::ApiCallError(deposit_response.error.concat()));
         }
 
         if let Some(result) = deposit_response.result {
@@ -246,11 +243,11 @@ async fn fetch_withdraw_data(
         let deposit_response: Response<WithdrawalInfo> =
             fetch_data(&url_path, &mut params, &api_key, &api_secret)
                 .await
-                .map_err(|e| ApiError::new(e.to_string()))?;
+                .map_err(|e| ApiError::ApiCallError(e.to_string()))?;
         *counter += 1;
 
         if !deposit_response.error.is_empty() {
-            return Err(ApiError::new(deposit_response.error.concat()));
+            return Err(ApiError::ApiCallError(deposit_response.error.concat()));
         }
 
         if let Some(result) = deposit_response.result {
@@ -269,13 +266,13 @@ async fn fetch_withdraw_data(
 }
 
 pub async fn fetch_specific_trade_data(
-    time: f64,
+    time: String,
     trading_pair: String,
 ) -> Result<Response<TickData>, ApiError> {
     let url = "/0/public/Trades";
     let mut params = HashMap::new();
     params.insert("pair", trading_pair);
-    params.insert("since", time.to_string());
+    params.insert("since", time);
     params.insert("count", 6.to_string());
     let encoded = form_urlencoded::Serializer::new(String::new())
         .extend_pairs(params.clone())
@@ -290,10 +287,11 @@ pub async fn fetch_specific_trade_data(
 
     let text = response.text().await.unwrap();
 
-    let trade_response: Response<TickData> = serde_json::from_str(&text).unwrap();
+    let trade_response: Response<TickData> =
+        serde_json::from_str(&text).map_err(|e| ApiError::DeserializationError(e.to_string()))?;
 
     if !trade_response.error.is_empty() {
-        return Err(ApiError::new(trade_response.error.concat()));
+        return Err(ApiError::ApiCallError(trade_response.error.concat()));
     }
 
     return Ok(trade_response);
@@ -312,7 +310,9 @@ pub async fn fetch_assets_pair() -> Result<Response<AssetPairs>, ApiError> {
     let trade_response: Response<AssetPairs> = serde_json::from_str(&text).unwrap();
 
     if !trade_response.error.is_empty() {
-        return Err(ApiError::new(trade_response.error.concat()));
+        return Err(ApiError::DeserializationError(
+            trade_response.error.concat(),
+        ));
     }
 
     return Ok(trade_response);

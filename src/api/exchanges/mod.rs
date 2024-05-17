@@ -1,5 +1,5 @@
-pub mod bitfinex;
-pub use bitfinex::*;
+// pub mod bitfinex;
+// pub use bitfinex::*;
 
-pub mod kraken;
-pub use kraken::*;
+pub mod kraken_api;
+pub use kraken_api::*;

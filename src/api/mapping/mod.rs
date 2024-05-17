@@ -2,5 +2,5 @@
 It
 */
 
-pub mod kraken;
-pub use kraken::*;
+pub mod kraken_mapping;
+pub use kraken_mapping::*;

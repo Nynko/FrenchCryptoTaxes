@@ -1,18 +1,36 @@
 use std::fmt;
 
 #[derive(Debug, Clone)]
-pub struct ApiError {
-    error: String,
+pub enum ApiError {
+    ApiCallError(String),
+    MappingError(MappingError),
+    CouldNotFindPrice { pairs: Vec<(String, String)> },
+    DeserializationError(String),
 }
 
-impl ApiError {
-    pub fn new(error: String) -> Self {
-        return ApiError { error };
-    }
+#[derive(Debug, Clone)]
+pub enum MappingError {
+    Other(String),
 }
 
 impl fmt::Display for ApiError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.error)
+        match self {
+            ApiError::ApiCallError(error) => write!(f, "{}", *error),
+            ApiError::MappingError(error) => match error {
+                MappingError::Other(e) => write!(f, "{}", *e),
+            },
+            ApiError::CouldNotFindPrice { pairs } => {
+                let pairs_string = pairs
+                    .iter()
+                    .map(|(first, second)| format!("{}/{}", first, second))
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                write!(f, "Couldn't find price for pairs: {pairs_string} ")
+            }
+            ApiError::DeserializationError(e) => {
+                write!(f, "Error during serde deserialisation: {e} ")
+            }
+        }
     }
 }

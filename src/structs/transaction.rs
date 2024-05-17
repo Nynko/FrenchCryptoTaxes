@@ -67,7 +67,7 @@ pub enum Transaction {
 }
 
 /* The Trade type:
-If FiatToCrypto :  Representation of the transaction cost basis.
+If FiatToCrypto : Representation of the transaction cost basis.
 This is used to calculate the global cost basis when iteratively treating the data.
 */
 #[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
@@ -105,6 +105,15 @@ impl Transaction {
             Transaction::Trade { tx, .. } => tx,
             Transaction::Deposit { tx, .. } => tx,
             Transaction::Withdrawal { tx, .. } => tx,
+        }
+    }
+
+    pub fn is_trade_or_transfer(&self) -> bool {
+        match self {
+            Transaction::Trade { .. } => true,
+            Transaction::Transfer { .. } => true,
+            Transaction::Deposit { .. } => false,
+            Transaction::Withdrawal { .. } => false,
         }
     }
 

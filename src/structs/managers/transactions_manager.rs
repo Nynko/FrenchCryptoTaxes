@@ -40,6 +40,10 @@ impl TransactionManager {
         return &self.transactions;
     }
 
+    pub fn get_mut(&mut self) -> &mut Vec<Transaction> {
+        return &mut self.transactions;
+    }
+
     pub fn save(&self) -> Result<(), IoError> {
         create_directories_if_needed(Self::PATH);
         let file = File::create(Self::PATH).map_err(|e| IoError::new(e.to_string()))?;
@@ -85,6 +89,11 @@ impl TransactionManager {
             self.push_update(tx); // We could optimize using extend_slice until the first duplicate (hence most of the time it would extend by slice everything)
         }
     }
+
+    pub fn sort(&mut self) {
+        self.transactions
+            .sort_by(|a, b| a.get_tx_base().timestamp.cmp(&b.get_tx_base().timestamp))
+    }
 }
 
 impl Drop for TransactionManager {
@@ -102,10 +111,7 @@ mod tests {
     use rust_decimal_macros::dec;
     use serial_test::serial;
 
-    use crate::{
-        api::Trade,
-        structs::{wallet::Platform, GlobalCostBasis, Taxable, TradeType, TransactionBase},
-    };
+    use crate::structs::{wallet::Platform, GlobalCostBasis, Taxable, TradeType, TransactionBase};
 
     use super::*;
 

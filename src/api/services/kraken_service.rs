@@ -1,8 +1,8 @@
-use std::
-    fs::File
-;
+use std::fs::File;
 
+use chrono::{DateTime, Utc};
 use rmp_serde::Serializer;
+use rust_decimal::Decimal;
 use serde::Serialize;
 
 use crate::{
@@ -11,10 +11,7 @@ use crate::{
         Tier,
     },
     errors::IoError,
-    structs::{
-        transaction::Transaction,
-        wallet_manager::WalletManager,
-    },
+    structs::{transaction::Transaction, wallet_manager::WalletManager},
     utils::{create_directories_if_needed, file_exists},
 };
 
@@ -79,3 +76,7 @@ pub fn kraken_pairs() -> Result<KrakenPairs, IoError> {
         return Ok(deserialized_map);
     }
 }
+
+// pub async fn get_price_api(time: DateTime<Utc>, currency: String) -> Option<Decimal> {
+
+// }

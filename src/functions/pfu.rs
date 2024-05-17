@@ -49,6 +49,16 @@ pub fn calculate_weigted_price(
     return current_cost_basis * sell_price / pf_total_value;
 }
 
+pub fn calculate_full_cost_basis(txs: &mut Vec<Transaction>) {
+    let mut global_cost_basis = GlobalCostBasis {
+        pf_cost_basis: dec!(0),
+        pf_total_cost: dec!(0),
+    };
+    for tx in txs {
+        global_cost_basis = calculate_cost_basis(tx, global_cost_basis);
+    }
+}
+
 /* Calculate the cost_basis, here "acquisition_pf_net" */
 pub fn calculate_cost_basis(tx: &mut Transaction, current_pf: GlobalCostBasis) -> GlobalCostBasis {
     match tx {
@@ -101,6 +111,7 @@ fn calculate_new_cost_basis(
     let mut cost_basis_adjustment: Decimal = dec!(0.00);
     if let Some(taxable) = taxable {
         if taxable.is_taxable {
+            println!("{:?}", taxable);
             // Selling of Crypto - Taxable event
             let sell_price: Decimal = Decimal::from(amount) * taxable.price_eur;
             let weigted_price =
@@ -170,7 +181,7 @@ mod tests {
     #[test]
     fn simple_transfer_with_fee() {
         let current_pf = get_pf(dec!(500.00), dec!(500.00));
-        let (btc_wallet, eur_wallet, eth_wallet) = create_wallets();
+        let (btc_wallet, _eur_wallet, _eth_wallet) = create_wallets();
 
         let from = btc_wallet;
 
@@ -206,7 +217,6 @@ mod tests {
     #[test]
     fn simple_trades() {
         let current_pf = get_pf(dec!(18000), dec!(18000));
-        let platform: &str = "Binance";
         let (btc_wallet, eur_wallet, _eth_wallet) = create_wallets();
 
         let init_pf = GlobalCostBasis {
@@ -247,7 +257,6 @@ mod tests {
 
     #[test]
     fn simple_two_trades() {
-        let platform: &str = "Binance";
         let (btc_wallet, eur_wallet, _eth_wallet) = create_wallets();
 
         let init_pf = GlobalCostBasis {
@@ -274,7 +283,7 @@ mod tests {
             cost_basis: init_pf.clone(),
         };
 
-        let mut current_pf = calculate_cost_basis(&mut tx0, init_pf.clone());
+        let current_pf = calculate_cost_basis(&mut tx0, init_pf.clone());
 
         let mut tx = Transaction::Trade {
             tx: TransactionBase {
@@ -298,7 +307,7 @@ mod tests {
             cost_basis: init_pf.clone(),
         };
 
-        let mut new_pf = calculate_cost_basis(&mut tx, current_pf);
+        let new_pf = calculate_cost_basis(&mut tx, current_pf);
 
         assert_eq!(new_pf.pf_total_cost, dec!(1000));
         assert_eq!(new_pf.pf_cost_basis, dec!(1000) - dec!(375));
