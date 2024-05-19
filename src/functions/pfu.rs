@@ -1,4 +1,4 @@
-use crate::structs::{GlobalCostBasis, Taxable, TradeType, Transaction, TransactionBase};
+use crate::structs::{GlobalCostBasis, Taxable, TradeType, Transaction, TransactionBase, WalletSnapshot};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 
@@ -63,7 +63,8 @@ pub fn calculate_full_cost_basis(txs: &mut Vec<Transaction>) {
 pub fn calculate_cost_basis(tx: &mut Transaction, current_pf: GlobalCostBasis) -> GlobalCostBasis {
     match tx {
         Transaction::Transfer {
-            tx,
+            to,
+            from,
             amount,
             taxable,
             cost_basis: pf,
@@ -71,10 +72,11 @@ pub fn calculate_cost_basis(tx: &mut Transaction, current_pf: GlobalCostBasis) -
         } => {
             pf.pf_cost_basis = current_pf.pf_cost_basis;
             pf.pf_total_cost = current_pf.pf_total_cost;
-            return calculate_new_cost_basis(tx, taxable, &pf, *amount);
+            return calculate_new_cost_basis(to, from, taxable, &pf, *amount);
         }
         Transaction::Trade {
-            tx,
+            to,
+            from,
             bought_amount,
             trade_type,
             taxable,
@@ -87,7 +89,7 @@ pub fn calculate_cost_basis(tx: &mut Transaction, current_pf: GlobalCostBasis) -
             };
             pf.pf_cost_basis = current_pf.pf_cost_basis + added_cost;
             pf.pf_total_cost = current_pf.pf_total_cost + added_cost;
-            return calculate_new_cost_basis(tx, taxable, &pf, *bought_amount);
+            return calculate_new_cost_basis(to, from, taxable, &pf, *bought_amount);
         }
         _ => current_pf, // ignoring the fiat deposit and withdrawal as they don't change the cost basis, they are here for accounting
     }
@@ -95,7 +97,8 @@ pub fn calculate_cost_basis(tx: &mut Transaction, current_pf: GlobalCostBasis) -
 
 /* Calculate new Portfolio: if the transaction is taxable the new cost basis will change, otherwise only the fee might change it */
 fn calculate_new_cost_basis(
-    tx: &TransactionBase,
+    to: &WalletSnapshot,
+    from: &WalletSnapshot,
     taxable: &Option<Taxable>,
     current_pf: &GlobalCostBasis,
     amount: Decimal,
@@ -103,15 +106,10 @@ fn calculate_new_cost_basis(
     let current_cost_basis = current_pf.pf_cost_basis;
     let current_total_cost = current_pf.pf_total_cost;
 
-    let fee = if tx.fee.is_some() && tx.fee_price.is_some() {
-        tx.fee.unwrap() * tx.fee_price.unwrap()
-    } else {
-        dec!(0.00)
-    };
+    let fee = to.fee.unwrap_or(dec!(0)) * to.price_eur.unwrap_or(dec!(0)) + from.fee.unwrap_or(dec!(0)) * from.price_eur.unwrap_or(dec!(0));
     let mut cost_basis_adjustment: Decimal = dec!(0.00);
     if let Some(taxable) = taxable {
         if taxable.is_taxable {
-            println!("{:?}", taxable);
             // Selling of Crypto - Taxable event
             let sell_price: Decimal = Decimal::from(amount) * taxable.price_eur;
             let weigted_price =
@@ -195,23 +193,24 @@ mod tests {
         let mut tx = Transaction::Transfer {
             tx: TransactionBase {
                 id: "test".to_string(),
-                fee: Some(fee),
-                fee_price: Some(price_eur_btc),
                 timestamp: Utc::now(),
             },
             from: WalletSnapshot {
                 id: btc_wallet.get_id().to_string(),
-                balance: dec!(1),
-                price_eur: None,
+                pre_tx_balance: dec!(1),
+                fee: Some(fee),
+                price_eur: Some(price_eur_btc),
             },
             to: WalletSnapshot {
                 id: btc_wallet.get_id().to_string(),
-                balance: dec!(1),
+                pre_tx_balance: dec!(1),
+                fee: None,
                 price_eur: None,
             },
             amount: dec!(1),
             taxable: None,
             cost_basis: init_pf,
+            income: None,
         };
 
         let new_pf = calculate_cost_basis(&mut tx, current_pf);
@@ -233,18 +232,18 @@ mod tests {
         let mut tx = Transaction::Trade {
             tx: TransactionBase {
                 id: "test".to_string(),
-                fee: None,
-                fee_price: None,
                 timestamp: Utc::now(),
             },
             from: WalletSnapshot {
                 id: btc_wallet.get_id().to_string(),
-                balance: dec!(1),
+                pre_tx_balance: dec!(1),
+                fee: None,
                 price_eur: None,
             },
             to: WalletSnapshot {
                 id: eur_wallet.get_id().to_string(),
-                balance: dec!(1),
+                pre_tx_balance: dec!(1),
+                fee: None,
                 price_eur: None,
             },
             exchange_pair: Some(("BTC".to_string(), "EUR".to_uppercase())),
@@ -281,18 +280,18 @@ mod tests {
         let mut tx0 = Transaction::Trade {
             tx: TransactionBase {
                 id: "test0".to_string(),
-                fee: None,
-                fee_price: None,
                 timestamp: Utc::now(),
             },
             from: WalletSnapshot {
                 id: eur_wallet.get_id().to_string(),
-                balance: dec!(1000),
+                pre_tx_balance: dec!(1000),
+                fee: None,
                 price_eur: None,
             },
             to: WalletSnapshot {
                 id: btc_wallet.get_id().to_string(),
-                balance: dec!(0),
+                pre_tx_balance: dec!(0),
+                fee: None,
                 price_eur: None,
             },
             exchange_pair: Some(("BTC".to_string(), "EUR".to_uppercase())),
@@ -310,18 +309,18 @@ mod tests {
         let mut tx = Transaction::Trade {
             tx: TransactionBase {
                 id: "test".to_string(),
-                fee: None,
-                fee_price: None,
                 timestamp: Utc::now(),
             },
             from: WalletSnapshot {
                 id: btc_wallet.get_id().to_string(),
-                balance: dec!(2),
+                pre_tx_balance: dec!(2),
+                fee: None,
                 price_eur: None,
             },
             to: WalletSnapshot {
                 id: eur_wallet.get_id().to_string(),
-                balance: dec!(0),
+                pre_tx_balance: dec!(0),
+                fee: None,
                 price_eur: None,
             },
             exchange_pair: Some(("BTC".to_string(), "EUR".to_uppercase())),
@@ -354,18 +353,18 @@ mod tests {
         let mut tx2 = Transaction::Trade {
             tx: TransactionBase {
                 id: "test2".to_string(),
-                fee: None,
-                fee_price: None,
                 timestamp: Utc::now(),
             },
             from: WalletSnapshot {
                 id: btc_wallet.get_id().to_string(),
-                balance: dec!(1),
+                pre_tx_balance: dec!(1),
+                fee: None,
                 price_eur: None,
             },
             to: WalletSnapshot {
                 id: eur_wallet.get_id().to_string(),
-                balance: dec!(450),
+                pre_tx_balance: dec!(450),
+                fee: None,
                 price_eur: None,
             },
             exchange_pair: None,

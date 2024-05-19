@@ -1,11 +1,14 @@
 use chrono::Utc;
 use rust_decimal_macros::dec;
+use serde_json::to_string;
 
 use crate::{
     functions::{calculate_full_cost_basis, calculate_tax_gains},
     structs::{
         portfolio_manager::{self, PortfolioManager},
-        GlobalCostBasis, Taxable, TradeType, Transaction, TransactionBase, WalletSnapshot,
+        wallet_manager::{self, WalletManager},
+        GlobalCostBasis, Owner, Platform, Taxable, TradeType, Transaction, TransactionBase,
+        Wallet, WalletBase, WalletSnapshot,
     },
 };
 
@@ -19,19 +22,19 @@ fn simple_two_trades() {
     let tx0 = Transaction::Trade {
         tx: TransactionBase {
             id: "test0".to_string(),
-            fee: None,
-            fee_price: None,
             timestamp: Utc::now(),
         },
         from: WalletSnapshot {
             id: "eur".to_string(),
-            balance: dec!(1000),
-            price_eur: None,
+            fee: None,
+            pre_tx_balance: dec!(1000),
+            price_eur: Some(dec!(1)),
         },
         to: WalletSnapshot {
             id: "btc".to_string(),
-            balance: dec!(0),
-            price_eur: None,
+            fee: None,
+            pre_tx_balance: dec!(0),
+            price_eur: Some(dec!(1)),
         },
         exchange_pair: Some(("BTC".to_string(), "EUR".to_uppercase())),
         sold_amount: dec!(1000),
@@ -46,19 +49,19 @@ fn simple_two_trades() {
     let tx1 = Transaction::Trade {
         tx: TransactionBase {
             id: "test".to_string(),
-            fee: None,
-            fee_price: None,
             timestamp: Utc::now(),
         },
         from: WalletSnapshot {
             id: "btc".to_string(),
-            balance: dec!(2),
-            price_eur: None,
+            pre_tx_balance: dec!(2),
+            fee: None,
+            price_eur: Some(dec!(600)),
         },
         to: WalletSnapshot {
             id: "eur".to_string(),
-            balance: dec!(0),
-            price_eur: None,
+            pre_tx_balance: dec!(0),
+            fee: None,
+            price_eur: Some(dec!(1)),
         },
         exchange_pair: Some(("BTC".to_string(), "EUR".to_uppercase())),
         sold_amount: dec!(1),
@@ -76,19 +79,19 @@ fn simple_two_trades() {
     let tx2 = Transaction::Trade {
         tx: TransactionBase {
             id: "test2".to_string(),
-            fee: None,
-            fee_price: None,
             timestamp: Utc::now(),
         },
         from: WalletSnapshot {
             id: "btc".to_string(),
-            balance: dec!(1),
-            price_eur: None,
+            pre_tx_balance: dec!(1),
+            fee: None,
+            price_eur: Some(dec!(1300)),
         },
         to: WalletSnapshot {
             id: "eur".to_string(),
-            balance: dec!(450),
-            price_eur: None,
+            pre_tx_balance: dec!(450),
+            fee: None,
+            price_eur: Some(dec!(1)),
         },
         exchange_pair: None,
         sold_amount: dec!(1),
@@ -105,8 +108,44 @@ fn simple_two_trades() {
 
     let mut transactions = vec![tx0, tx1, tx2];
 
-    let portfolio_manager =
+    let mut wallet_manager =
+        WalletManager::new(Some(".data_test/simple_trade_wallet".to_string())).unwrap();
+
+    wallet_manager.wallets.insert(
+        "btc".to_string(),
+        Wallet::Crypto(WalletBase {
+            id: "btc".to_string(),
+            currency: "BTC".to_string(),
+            platform: Platform::Binance,
+            address: None,
+            owner: Owner::User,
+            balance: dec!(0),
+            info: None,
+        }),
+    );
+
+    wallet_manager.wallets.insert(
+        "eur".to_string(),
+        Wallet::Fiat(WalletBase {
+            id: "eur".to_string(),
+            currency: "EUR".to_string(),
+            platform: Platform::Binance,
+            address: None,
+            owner: Owner::User,
+            balance: dec!(0),
+            info: None,
+        }),
+    );
+
+    let mut portfolio_manager =
         PortfolioManager::new(Some(".data_test/simple_trade".to_string())).unwrap();
+
+    portfolio_manager
+        .calculate_portfolio_history_and_update_tx(&mut transactions, &wallet_manager.wallets)
+        .unwrap();
+
+    assert_eq!(transactions[1].get_taxable().as_ref().unwrap().pf_total_value, dec!(1200));
+    assert_eq!(transactions[2].get_taxable().as_ref().unwrap().pf_total_value, dec!(1300));
 
     calculate_full_cost_basis(&mut transactions);
     let gains = calculate_tax_gains(&transactions[1]);

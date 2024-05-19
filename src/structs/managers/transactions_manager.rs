@@ -24,11 +24,7 @@ impl TransactionManager {
 
     pub fn new(path: Option<String>) -> Result<Self, IoError> {
         // Load wallets here or create empty Vec
-        let path = if path.is_some() {
-            path.unwrap()
-        } else {
-            Self::PATH.to_string()
-        };
+        let path = path.unwrap_or(Self::PATH.to_string());
         if !file_exists(&path) {
             return Ok(Self {
                 transactions: Vec::new(),
@@ -119,15 +115,11 @@ impl Drop for TransactionManager {
 #[cfg(test)]
 mod tests {
 
-    use std::{thread::sleep, time::Duration};
-
-    use chrono::{DateTime, Utc};
+    use chrono::DateTime;
     use rust_decimal_macros::dec;
     use serial_test::serial;
 
-    use crate::structs::{
-        wallet::Platform, GlobalCostBasis, Taxable, TradeType, TransactionBase, WalletSnapshot,
-    };
+    use crate::structs::{GlobalCostBasis, Taxable, TradeType, TransactionBase, WalletSnapshot};
 
     use super::*;
 
@@ -140,18 +132,18 @@ mod tests {
         let tx1 = Transaction::Trade {
             tx: TransactionBase {
                 id: "test".to_string(),
-                fee: None,
-                fee_price: None,
                 timestamp: DateTime::from_timestamp(61, 0).unwrap(),
             },
             from: WalletSnapshot {
                 id: "btc".to_string(),
-                balance: dec!(1),
+                pre_tx_balance: dec!(1),
+                fee: None,
                 price_eur: None,
             },
             to: WalletSnapshot {
                 id: "eur".to_string(),
-                balance: dec!(0),
+                pre_tx_balance: dec!(0),
+                fee: None,
                 price_eur: None,
             },
             exchange_pair: None,
@@ -173,18 +165,18 @@ mod tests {
         let tx2 = Transaction::Trade {
             tx: TransactionBase {
                 id: "test".to_string(),
-                fee: None,
-                fee_price: None,
                 timestamp: DateTime::from_timestamp(61, 0).unwrap(),
             },
             from: WalletSnapshot {
                 id: "btc".to_string(),
-                balance: dec!(1),
+                pre_tx_balance: dec!(1),
+                fee: None,
                 price_eur: None,
             },
             to: WalletSnapshot {
                 id: "eur".to_string(),
-                balance: dec!(0),
+                pre_tx_balance: dec!(0),
+                fee: None,
                 price_eur: None,
             },
             exchange_pair: None,
@@ -218,18 +210,18 @@ mod tests {
         let tx1 = Transaction::Trade {
             tx: TransactionBase {
                 id: "test".to_string(),
-                fee: None,
-                fee_price: None,
                 timestamp: DateTime::from_timestamp(61, 0).unwrap(),
             },
             from: WalletSnapshot {
                 id: "btc".to_string(),
-                balance: dec!(1),
+                pre_tx_balance: dec!(1),
+                fee: None,
                 price_eur: None,
             },
             to: WalletSnapshot {
                 id: "eur".to_string(),
-                balance: dec!(0),
+                pre_tx_balance: dec!(0),
+                fee: None,
                 price_eur: None,
             },
             exchange_pair: None,
@@ -251,18 +243,18 @@ mod tests {
         let tx2 = Transaction::Trade {
             tx: TransactionBase {
                 id: "test".to_string(),
-                fee: None,
-                fee_price: None,
                 timestamp: DateTime::from_timestamp(61, 0).unwrap(),
             },
             from: WalletSnapshot {
                 id: "btc".to_string(),
-                balance: dec!(1),
+                pre_tx_balance: dec!(1),
+                fee: None,
                 price_eur: None,
             },
             to: WalletSnapshot {
                 id: "eur".to_string(),
-                balance: dec!(0),
+                pre_tx_balance: dec!(0),
+                fee: None,
                 price_eur: None,
             },
             exchange_pair: None,

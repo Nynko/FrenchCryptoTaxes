@@ -30,11 +30,7 @@ impl PortfolioManager {
 
     pub fn new(path: Option<String>) -> Result<Self, IoError> {
         // Load wallets here or create empty Vec
-        let path = if path.is_some() {
-            path.unwrap()
-        } else {
-            Self::PATH.to_string()
-        };
+        let path = path.unwrap_or(Self::PATH.to_string());
         if !file_exists(&path) {
             return Ok(Self {
                 portfolio_history: HashMap::new(),
@@ -72,6 +68,9 @@ impl PortfolioManager {
     ) -> Result<(), PortfolioHistoryError> {
         let mut state: HashMap<WalletId, WalletSnapshot> = HashMap::new();
         for tx in txs {
+            if  self.portfolio_history.get(&tx.get_tx_base().id).is_none(){
+                self.portfolio_history.insert(tx.get_tx_base().id.to_string(), HashMap::new());
+            }
             self._calculate(tx, &mut state, wallets).await?;
             match tx {
                 Transaction::Trade {
@@ -95,9 +94,9 @@ impl PortfolioManager {
 
     pub fn calculate_total_value(&self, tx_id: &TransactionId) -> Option<Decimal> {
         return self.portfolio_history.get(tx_id).map(|wallet_map| {
-            wallet_map
-                .values()
-                .fold(Decimal::new(0, 0), |acc, wallet| acc + wallet.balance)
+            wallet_map.values().fold(Decimal::new(0, 0), |acc, wallet| {
+                acc + wallet.pre_tx_balance * wallet.price_eur.unwrap()
+            })
         });
     }
 
@@ -109,6 +108,9 @@ impl PortfolioManager {
     ) -> Result<(), PortfolioHistoryError> {
         let mut state: HashMap<WalletId, WalletSnapshot> = HashMap::new();
         for tx in txs {
+            if  self.portfolio_history.get(&tx.get_tx_base().id).is_none(){
+                self.portfolio_history.insert(tx.get_tx_base().id.to_string(), HashMap::new());
+            }
             self._calculate(tx, &mut state, wallets).await?;
         }
         Ok(())
@@ -134,7 +136,7 @@ impl PortfolioManager {
                 let from_wallet = wallets.get(&from.id);
                 let to_wallet = wallets.get(&to.id);
 
-                self.insert_balance_from_wallet(from_wallet, from, previous_state)?;
+                self.insert_balance_from_wallet(&tx.id,from_wallet, from, previous_state)?;
 
                 if taxable.as_ref().is_some_and(|tax| tax.is_taxable) {
                     // If taxable we need the price and to insert/update the history
@@ -150,7 +152,7 @@ impl PortfolioManager {
                     tx.id.clone(),
                     previous_state,
                 )?;
-                self.update_balance_to_wallet(to_wallet, bought_amount, previous_state);
+                self.update_balance_to_wallet(to_wallet, to, bought_amount, previous_state);
                 Ok(())
             }
             Transaction::Transfer {
@@ -164,7 +166,7 @@ impl PortfolioManager {
                 let from_wallet = wallets.get(&from.id);
                 let to_wallet = wallets.get(&to.id);
 
-                self.insert_balance_from_wallet(from_wallet, from, previous_state)?;
+                self.insert_balance_from_wallet(&tx.id,from_wallet, from, previous_state)?;
 
                 if taxable.as_ref().is_some_and(|tax| tax.is_taxable) {
                     // If taxable we need the price and to insert/update the history
@@ -180,7 +182,7 @@ impl PortfolioManager {
                     tx.id.clone(),
                     previous_state,
                 )?;
-                self.update_balance_to_wallet(to_wallet, amount, previous_state);
+                self.update_balance_to_wallet(to_wallet, to, amount, previous_state);
 
                 Ok(())
             }
@@ -189,7 +191,8 @@ impl PortfolioManager {
     }
 
     fn insert_balance_from_wallet(
-        &self,
+        &mut self,
+        tx_id: &String,
         from: Option<&Wallet>,
         from_snap: &WalletSnapshot,
         previous_state: &mut HashMap<WalletId, WalletSnapshot>,
@@ -197,23 +200,42 @@ impl PortfolioManager {
         if let Some(Wallet::Crypto(base)) = from {
             let previous_snap = previous_state.get_mut(&base.id);
             if let Some(prev_snap) = previous_snap {
-                if (prev_snap.balance != from_snap.balance) {
+                if (prev_snap.pre_tx_balance != from_snap.pre_tx_balance) {
                     // return Err(PortfolioHistoryError::MismatchBetweenBalances {
                     //     threshold: dec!(0),
                     //     old_balance: prev_snap.balance,
                     //     new_balance: from_snap.balance,
                     // });
                     println!(
-                        "Mismatch calculated balance: {} - balance from data {}",
-                        prev_snap.balance, from_snap.balance
+                        "Mismatch calculated balance: {} - balance from data {} - wallet_id: {} - for currency: {}",
+                        prev_snap.pre_tx_balance, from_snap.pre_tx_balance,base.id,base.currency
                     );
+                } else if from_snap.price_eur.is_some(){
+                    self.portfolio_history.get_mut(tx_id).unwrap().insert(base.id.clone(), from_snap.clone());
                 }
             } else {
                 previous_state.insert(base.id.clone(), from_snap.clone());
+                self.portfolio_history.get_mut(tx_id).unwrap().insert(base.id.clone(), from_snap.clone());
             }
         }
         Ok(())
     }
+
+    /* As a rule, the fee is not contained in the amount in any way:
+
+    Example:
+            Sold_Amount: 100
+            From Wallet :
+                pre_tx_balance: 150
+                fee: 2
+                post_tx_balance: 48 (pre_tx_balance - amount - fee)
+
+            Bought_Amount: 220
+            To Wallet:
+                pre_tx_balance: 10
+                fee: 1
+                post_tx_balance: 229 (pre_tx_balance + amount - fee)
+     */
 
     fn update_balance_from_wallet(
         &self,
@@ -225,8 +247,9 @@ impl PortfolioManager {
         if let Some(Wallet::Crypto(base)) = from {
             let wallet_snap = previous_state.get_mut(&base.id);
             let snap = wallet_snap.unwrap(); // We added it before so it must exist
-            snap.balance -= amount;
-            if snap.balance == dec!(0) {
+            let fee = snap.fee.unwrap_or(dec!(0));
+            snap.pre_tx_balance = snap.pre_tx_balance - amount - fee;
+            if snap.pre_tx_balance == dec!(0) {
                 // No need to keep the walletSnapshot if the balance is zero
                 previous_state.remove(&base.id);
             }
@@ -237,19 +260,23 @@ impl PortfolioManager {
     fn update_balance_to_wallet(
         &self,
         to: Option<&Wallet>,
+        tx_wallet_snap: &WalletSnapshot,
         amount: &Decimal,
         previous_state: &mut HashMap<WalletId, WalletSnapshot>,
     ) {
         if let Some(Wallet::Crypto(base)) = to {
             let wallet_snap = previous_state.get_mut(&base.id);
             if let Some(snap) = wallet_snap {
-                snap.balance += amount;
+                let fee = snap.fee.unwrap_or(dec!(0));
+                snap.pre_tx_balance += amount - fee;
             } else {
+                let fee = tx_wallet_snap.fee.unwrap_or(dec!(0));
                 previous_state.insert(
                     base.id.clone(),
                     WalletSnapshot {
                         id: base.id.to_string(),
-                        balance: *amount,
+                        pre_tx_balance: tx_wallet_snap.pre_tx_balance + *amount - fee,
+                        fee: tx_wallet_snap.fee,
                         price_eur: None,
                     },
                 );
@@ -264,18 +291,19 @@ impl PortfolioManager {
         wallets: &HashMap<String, Wallet>,
     ) -> Result<HashMap<WalletId, WalletSnapshot>, PortfolioHistoryError> {
         let tx = transaction.get_tx_base();
-        let previous_value = self.portfolio_history.get(&tx.id);
-        // Either updating the state or insert it
+        let existing_state = self.portfolio_history.get(&tx.id);
         for (id, wallet_snap) in &mut *state {
-            if let Some(ref prev) = previous_value {
+            if let Some(ref prev) = existing_state {
+                // If the state existed before, we can try to get the previous calculated prices
                 let previous_wallet = prev.get(id);
                 if previous_wallet.is_some() && previous_wallet.unwrap().price_eur.is_some() {
-                    // Update the state with previous values price
+                    // Update the state with existing values price
                     wallet_snap.price_eur = previous_wallet.unwrap().price_eur;
                     continue; // No need to get the price
                 }
             }
-            // Get the price
+
+            // Else: if the price didn't exist before OR the wallet didn't exist: get the price
             let wallet = wallets.get(id).unwrap();
             let price = get_price_api(transaction, wallet)
                 .await

@@ -24,11 +24,7 @@ impl WalletManager {
 
     pub fn new(path: Option<String>) -> Result<Self, IoError> {
         // Load wallets here or create empty Vec
-        let path = if path.is_some() {
-            path.unwrap()
-        } else {
-            Self::PATH.to_string()
-        };
+        let path = path.unwrap_or(Self::PATH.to_string());
         if !file_exists(&path) {
             return Ok(Self {
                 wallets: HashMap::new(),

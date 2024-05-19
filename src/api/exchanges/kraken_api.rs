@@ -391,7 +391,7 @@ impl Tier {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct TradeEntry {
-    pub price: String,
+    pub price: Decimal,
     pub volume: String,
     pub time: f64,
     pub buy_sell: String,
@@ -532,7 +532,7 @@ pub struct TradeInfo {
     pub time: f64,
     pub r#type: String,
     pub ordertype: String,
-    pub price: String,
+    pub price: Decimal,
     pub cost: String,
     pub fee: Decimal,
     pub vol: String,

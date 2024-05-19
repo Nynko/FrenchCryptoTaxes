@@ -1,6 +1,7 @@
-use super::{GlobalCostBasis, Wallet, WalletId, WalletSnapshot};
+use super::{GlobalCostBasis, Wallet, WalletSnapshot};
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
+use rust_decimal_macros::dec;
 use serde::{Deserialize, Serialize};
 
 /* A Transaction correspond to an exchange: Crypto or Fiat
@@ -40,6 +41,7 @@ pub enum Transaction {
         to: WalletSnapshot,
         amount: Decimal,
         taxable: Option<Taxable>,
+        income : Option<Income>, // Income correspond to a Crypto Transfer to from and to the same wallet that can be a reward, a staking interest, an airdrop, a mining, or a payment in crypto 
         cost_basis: GlobalCostBasis,
     },
     // Trade can be a Crypto/Crypto non taxable trade, or taxable sold of Crypto, or non taxable event: buying crypto
@@ -77,6 +79,26 @@ pub enum TradeType {
     CryptoToCrypto,
 }
 
+
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub struct Income {
+    value: Decimal,
+    subtype : IncomeType
+}
+
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub enum IncomeType{
+    Airdrop,
+    Hardfork,
+    Income,
+    Interest,
+    Mining,
+    Staking,
+    Gift,
+    Donation,
+    Other(String)
+}
+
 /*The pf_total_value should be set depending on the global value of the portfolio before each transaction (at least each taxable one).
 It can be caculated from the price of all wallets at an instant t.
 The issue is getting price at instant t may take time (calling API). We want to get that information before actually treating the transaction,
@@ -93,9 +115,7 @@ pub struct Taxable {
 #[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionBase {
     pub id: String, // This should not be generated but come from an external source  OR if not possible deterministically created from "uniqueness" element of the transaction (timestamp, fee, wallet_ids...)
-    pub fee: Option<Decimal>,
     pub timestamp: DateTime<Utc>,
-    pub fee_price: Option<Decimal>, // For now in EUR, think about creating a Price<Currency> or Price<T>
 }
 
 impl Transaction {
@@ -105,6 +125,14 @@ impl Transaction {
             Transaction::Trade { tx, .. } => tx,
             Transaction::Deposit { tx, .. } => tx,
             Transaction::Withdrawal { tx, .. } => tx,
+        }
+    }
+
+    pub fn get_taxable(&self) -> &Option<Taxable> {
+        match self {
+            Transaction::Transfer { taxable, .. } => taxable,
+            Transaction::Trade { taxable, .. } => taxable,
+            _ => &None
         }
     }
 
@@ -121,6 +149,7 @@ impl Transaction {
         tx: TransactionBase,
         to: &Wallet,
         amount: Decimal,
+        fee: Option<Decimal>,
         price_eur: Option<Decimal>,
     ) -> Result<Self, &'static str> {
         // Ensure the wallet type is Fiat
@@ -129,7 +158,8 @@ impl Transaction {
                 tx,
                 to: WalletSnapshot {
                     id: to.get().id.clone(),
-                    balance: amount,
+                    pre_tx_balance: dec!(0),
+                    fee,
                     price_eur,
                 },
                 amount,
@@ -143,6 +173,7 @@ impl Transaction {
         tx: TransactionBase,
         from: &Wallet,
         amount: Decimal,
+        fee: Option<Decimal>,
         price_eur: Option<Decimal>,
     ) -> Result<Self, &'static str> {
         // Ensure the wallet type is Fiat
@@ -151,7 +182,8 @@ impl Transaction {
                 tx,
                 from: WalletSnapshot {
                     id: from.get().id.clone(),
-                    balance: amount,
+                    pre_tx_balance: dec!(0),
+                    fee,
                     price_eur,
                 },
                 amount,

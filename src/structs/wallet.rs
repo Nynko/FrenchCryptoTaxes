@@ -108,7 +108,7 @@ pub enum Platform {
 
 #[derive(Hash, Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct WalletBase {
-    // currency + address + platform should be unique
+    // currency + address + platform should be unique ---> Maybe we should implement Eq, PartialEq, and Hash traits as so, so we don't need to use WalletIdMap
     pub id: WalletId,
     pub currency: String,
     pub platform: Platform,
@@ -118,10 +118,17 @@ pub struct WalletBase {
     pub info: Option<String>,
 }
 
-/* Correspond to a snapshot of the wallet state (balance and potentially price) for a transaction */
+/* Correspond to a snapshot of the wallet state (balance and potentially price) before a transaction. (It is always associated to a transaction)
+The fee is included here as it is taken from the wallet state. The fee is an information relative to the Wallet State: the balance and also to the cost_basis.
+
+We don't considere the fee to be a taxable event has it would greatly complexify the transactions with many micro-transaction and imply that CryptoToCrypto
+transfer with fee would make a taxable event.
+This is a choice, and tax over fees are possible to be implemented.
+*/
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct WalletSnapshot {
     pub id: WalletId,
-    pub balance: Decimal,
+    pub pre_tx_balance: Decimal,
     pub price_eur: Option<Decimal>,
+    pub fee: Option<Decimal>,
 }

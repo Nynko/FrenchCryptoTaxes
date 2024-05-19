@@ -24,7 +24,7 @@ fn main() {
 
     transactions_manager.sort();
 
-    // println!("{:?}", transactions_manager.get());
+    println!("{:?}", transactions_manager.get());
 
     portfolio_manager
         .calculate_portfolio_history_and_update_tx(
@@ -33,7 +33,7 @@ fn main() {
         )
         .unwrap();
 
-    // println!("{:?}", portfolio_manager.portfolio_history);
+    println!("{:?}", portfolio_manager.portfolio_history);
 
     calculate_full_cost_basis(transactions_manager.get_mut());
 

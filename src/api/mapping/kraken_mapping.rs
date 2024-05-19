@@ -62,52 +62,36 @@ pub async fn create_kraken_txs(
 
                 let selling_amount = selling.amount.abs();
 
+                let price = if FiatKraken::is_eur_str(pair.1) {Some(trade.price)} else {None};
+
+
                 let wallet_from = create_or_get_wallet(
                     wallet_manager,
                     sold_currency,
                     &platform,
                     &None,
-                    selling.balance,
-                    selling_amount,
-                    selling.fee,
-                )?;
+                    ToOrFromWallet::new_from(selling.balance,
+                        selling_amount,
+                        selling.fee),
+                    price,
+                    trade.time
+                    
+                ).await?;
 
-                if refid == "TLK2JQ-B7ZFH-JOY3I5" {
-                    println!("HEEEEERRRREEEE {:?}", wallet_from);
-                }
                 let wallet_to = create_or_get_wallet(
                     wallet_manager,
                     buy_currency,
                     &platform,
                     &None,
-                    buying.balance,
-                    dec!(0),
-                    buying.fee,
-                )?;
+                    ToOrFromWallet::new_to(buying.balance,
+                        buying.amount,
+                        buying.fee),
+                    price,
+                    trade.time
+                ).await?;
 
                 let time = entry.time;
                 let fee_and_entry = get_fee(selling, buying)?;
-                let mut fee = None;
-                let mut fee_price: Option<Decimal> = None;
-
-                // Handle the fee and fee price
-                if let Some((fee_value, entry_fee, other_entry)) = fee_and_entry {
-                    fee = Some(fee_value);
-                    // Get fee_price
-                    if entry_fee.asset == "ZEUR" {
-                        fee_price = Some(dec!(1));
-                    } else if other_entry.asset == "ZEUR" {
-                        // We can guess the price by using the amounts
-                        fee_price = Some(other_entry.amount / entry.amount); // Price of in euro of the asset we sold
-                    } else {
-                        // We get the price
-                        let price =
-                            get_currency_price(time.to_string(), entry_fee.asset.to_string())
-                                .await?;
-                        fee_price = Some(price);
-                    }
-                }
-
                 let mut taxable: Option<Taxable> = None;
                 let mut trade_type = TradeType::CryptoToCrypto;
 
@@ -134,8 +118,8 @@ pub async fn create_kraken_txs(
                     let price_sold_currency: Decimal;
                     if fiat.is_eur() {
                         price_sold_currency = dec!(1);
-                    } else if selling.fee != dec!(0) {
-                        price_sold_currency = fee_price.unwrap();
+                    } else if wallet_from.fee.is_some() {
+                        price_sold_currency = wallet_from.price_eur.unwrap();
                     } else {
                         let time = buying.time;
                         price_sold_currency =
@@ -156,9 +140,7 @@ pub async fn create_kraken_txs(
                 let tx = Transaction::Trade {
                     tx: TransactionBase {
                         id: refid.to_string(),
-                        fee,
                         timestamp: f64_to_datetime_utc(selling.time).unwrap(),
-                        fee_price,
                     },
                     from: wallet_from,
                     to: wallet_to,
@@ -179,9 +161,62 @@ pub async fn create_kraken_txs(
             //     }
 
             // },
-            EntryType::Deposit => todo!(),
-            EntryType::Withdrawal => todo!(),
-            // EntryType::Staking => todo!(),
+            EntryType::Deposit => {
+                // We only take Deposits in Crypto into account for now
+                let currency = &entry.asset;
+                if !FiatKraken::is_fiat(currency) {
+                    let refid = &entry.refid;
+                    let deposit = deposits.get(refid).unwrap();
+                    let from_address = &deposit.info;
+                    let tx_id = &deposit.txid;
+                    let amount = entry.amount;
+                    let balance_after = entry.balance;
+                    let fee = entry.fee;
+                    let time =  entry.time;
+
+                    // if *fee != dec!(0) {}
+
+                    println!("Deposit Crypto : {amount} {currency}");
+
+                    let wallet_from = create_or_get_wallet(
+                        wallet_manager,
+                        &currency,
+                        &Platform::Blockchain,
+                        &from_address,
+                        ToOrFromWallet::new_from(balance_after,
+                            amount,
+                            fee),
+                            None,
+                            time
+                    ).await?;
+
+                    let wallet_to = create_or_get_wallet(
+                        wallet_manager,
+                        &currency,
+                        &Platform::Kraken,
+                        &None,
+                        ToOrFromWallet::new_from(balance_after,
+                            amount,
+                            fee),
+                            None,
+                            time
+                    ).await?;
+
+                    // let wallet_to = create_or_get_wallet(
+                    //     wallet_manager,
+                    //     currency,
+                    //     &platform,
+                    //     &None,
+                    //     *balance_after,
+                    //     dec!(0),
+                    //     buying.fee,
+                    // )?;
+                }
+            }
+            EntryType::Withdrawal => {
+
+            },
+            EntryType::Staking => todo!(),
             // EntryType::Reward => todo!(),
             _ => (),
         }
@@ -252,28 +287,101 @@ async fn get_pair_price(time: String, trading_pair: String) -> Decimal {
     let vec_prices = result.trades.get(pair_key).unwrap();
     let mut total = dec!(0);
     for price in vec_prices {
-        total += Decimal::from_str_exact(&price.price).unwrap();
+        total += &price.price;
     }
     return total / Decimal::from(vec_prices.len());
 }
 
-fn create_or_get_wallet(
+enum ToOrFromWallet{
+    ToWallet(WalletData),
+    FromWallet(WalletData)
+}
+
+impl ToOrFromWallet {
+
+    pub fn new_to( post_trade_balance: Decimal,
+        amount: Decimal,
+        fee: Decimal) -> Self {
+            return Self::ToWallet(WalletData { post_trade_balance, amount, fee })
+        }
+
+    pub fn new_from( post_trade_balance: Decimal,
+        amount: Decimal,
+        fee: Decimal) -> Self {
+            return Self::FromWallet(WalletData { post_trade_balance, amount, fee })
+        }
+
+    pub fn get_pre_tx_balance(&self) -> Decimal {
+        match self{
+            ToOrFromWallet::ToWallet(WalletData { post_trade_balance, amount, fee }) => {
+                // Because post_trade_balance correspond to the balance after we removed the amount and the potential fee
+                // post_trade_balance = pre_tx_balance - amount - fee 
+                post_trade_balance + amount + fee
+            },
+            ToOrFromWallet::FromWallet(WalletData { post_trade_balance, amount, fee }) => {
+                // The post_trade_balance correspond to the balance after we added the amount and removed the potential fee
+                // post_trade_balance = pre_tx_balance + amount - fee 
+                post_trade_balance - amount + fee
+            },
+        }
+    }
+
+    pub fn get_post_tx_balance(&self) -> &Decimal{
+        match self {
+            ToOrFromWallet::ToWallet(WalletData { post_trade_balance, ..}) => post_trade_balance,
+            ToOrFromWallet::FromWallet(WalletData { post_trade_balance, .. }) => post_trade_balance,
+        }
+    }
+
+    pub fn get_fee(&self) -> &Decimal{
+        match self {
+            ToOrFromWallet::ToWallet(WalletData {fee, ..}) =>fee,
+            ToOrFromWallet::FromWallet(WalletData {fee, .. }) =>fee,
+        }
+    }
+}
+
+struct WalletData{
+    post_trade_balance: Decimal,
+    amount: Decimal,
+    fee: Decimal
+}
+
+async fn create_or_get_wallet(
     wallet_manager: &mut WalletManager,
     currency: &String,
     platform: &Platform,
     address: &Option<String>,
-    post_trade_balance: Decimal,
-    amount: Decimal,
-    fee: Decimal,
+    to_or_from_wallet : ToOrFromWallet,
+    trade_fee_price: Option<Decimal>,
+    time: f64
 ) -> Result<WalletSnapshot, ApiError> {
     let wallet_ids = &mut wallet_manager.wallet_ids;
     let wallets = &mut wallet_manager.wallets;
     let wallet_id = wallet_ids.get(currency, platform, address);
+
+    let pre_tx_balance = to_or_from_wallet.get_pre_tx_balance();
+    let post_tx_balance = *to_or_from_wallet.get_post_tx_balance();
+    let fee = *to_or_from_wallet.get_fee();
+
+    let mut fee_price = trade_fee_price;
+    if fee_price.is_none(){
+        if FiatKraken::is_eur_str(&currency){
+            fee_price = Some(dec!(1));
+        } else {
+            let price =
+            get_currency_price(time.to_string(), currency.to_string())
+                .await?;
+            fee_price = Some(price);
+        }
+    }
+
     if let Some(id) = wallet_id {
         return Ok(WalletSnapshot {
             id: id,
-            balance: post_trade_balance + amount + fee,
-            price_eur: None,
+            pre_tx_balance,
+            fee: Some(fee),
+            price_eur: fee_price,
         });
     } else {
         let wallet_from: Wallet;
@@ -283,7 +391,7 @@ fn create_or_get_wallet(
             platform: platform.clone(),
             address: None,
             owner: Owner::User,
-            balance: post_trade_balance, // Post trade
+            balance: post_tx_balance, 
             info: None,
         };
         if FiatKraken::from_str(&currency).is_some() {
@@ -297,8 +405,9 @@ fn create_or_get_wallet(
         wallets.insert(wallet_id.clone(), wallet_from);
         return Ok(WalletSnapshot {
             id: wallet_id,
-            balance: post_trade_balance + amount + fee, // before trade
-            price_eur: None,
+            pre_tx_balance,
+            fee:Some(fee),
+            price_eur: fee_price,
         });
     }
 }
@@ -364,11 +473,20 @@ impl FiatKraken {
         }
     }
 
+    pub fn is_fiat(s: &str) -> bool {
+        return Self::from_str(s).is_some();
+    }
+
     pub fn is_eur(&self) -> bool {
         match self {
             FiatKraken::ZEUR => true,
             _ => false,
         }
+    }
+
+    pub fn is_eur_str(s: &str) -> bool {
+        return Self::from_str(s).map(|s| s.is_eur()).unwrap_or(false);
+
     }
 }
 
