@@ -31,7 +31,6 @@ pub fn handle_kraken_data(
     let file_path = ".data/kraken/kraken_mapped_data";
     if !file_exists(file_path) {
         let response = get_kraken_history()?;
-        println!("{:?}", response);
         create_kraken_txs(
             wallet_manager,
             &mut kraken_txs,

@@ -216,7 +216,7 @@ pub async fn create_kraken_txs(
             EntryType::Withdrawal => {
 
             },
-            EntryType::Staking => todo!(),
+            // EntryType::Staking => todo!(),
             // EntryType::Reward => todo!(),
             _ => (),
         }
@@ -291,7 +291,7 @@ async fn get_pair_price(time: String, trading_pair: String) -> Decimal {
     }
     return total / Decimal::from(vec_prices.len());
 }
-
+#[derive(Debug)]
 enum ToOrFromWallet{
     ToWallet(WalletData),
     FromWallet(WalletData)
@@ -313,12 +313,12 @@ impl ToOrFromWallet {
 
     pub fn get_pre_tx_balance(&self) -> Decimal {
         match self{
-            ToOrFromWallet::ToWallet(WalletData { post_trade_balance, amount, fee }) => {
+            ToOrFromWallet::FromWallet(WalletData { post_trade_balance, amount, fee }) => {
                 // Because post_trade_balance correspond to the balance after we removed the amount and the potential fee
                 // post_trade_balance = pre_tx_balance - amount - fee 
                 post_trade_balance + amount + fee
             },
-            ToOrFromWallet::FromWallet(WalletData { post_trade_balance, amount, fee }) => {
+            ToOrFromWallet::ToWallet(WalletData { post_trade_balance, amount, fee }) => {
                 // The post_trade_balance correspond to the balance after we added the amount and removed the potential fee
                 // post_trade_balance = pre_tx_balance + amount - fee 
                 post_trade_balance - amount + fee
@@ -340,7 +340,7 @@ impl ToOrFromWallet {
         }
     }
 }
-
+#[derive(Debug)]
 struct WalletData{
     post_trade_balance: Decimal,
     amount: Decimal,
