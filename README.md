@@ -1,4 +1,4 @@
-# French Crypto Taxes : An open source project for calculating your crypto taxes
+# French Crypto Taxes : An open source project for calculating your crypto taxes [WIP]
 
 > English version below
 
