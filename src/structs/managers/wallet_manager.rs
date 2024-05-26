@@ -1,14 +1,9 @@
-use std::fs::File;
-
 use hashbrown::HashMap;
-use rmp_serde::Serializer;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    errors::IoError,
-    structs::{Wallet, WalletIdMap},
-    utils::{create_directories_if_needed, file_exists},
-};
+use crate::structs::{Wallet, WalletIdMap};
+
+use super::Persistable;
 
 /* This wallet manager will handle saving the data and loading the previous data if they exist.
 It will implement de Drop trait to save.*/
@@ -19,35 +14,21 @@ pub struct WalletManager {
     path: String,
 }
 
-impl WalletManager {
-    pub const PATH: &'static str = ".data/wallets";
+impl Persistable for WalletManager {
+    const PATH: &'static str = ".data/wallets";
 
-    pub fn new(path: Option<String>) -> Result<Self, IoError> {
-        // Load wallets here or create empty Vec
-        let path = path.unwrap_or(Self::PATH.to_string());
-        if !file_exists(&path) {
-            return Ok(Self {
-                wallets: HashMap::new(),
-                wallet_ids: WalletIdMap {
-                    ids: HashMap::new(),
-                },
-                path,
-            });
-        } else {
-            let file = File::open(path).map_err(|e| IoError::new(e.to_string()))?;
-            let deserialized_map: WalletManager =
-                rmp_serde::from_read(file).map_err(|e| IoError::new(e.to_string()))?;
-            return Ok(deserialized_map);
+    fn default_new(path: String) -> Self {
+        Self {
+            wallets: HashMap::new(),
+            wallet_ids: WalletIdMap {
+                ids: HashMap::new(),
+            },
+            path,
         }
     }
 
-    pub fn save(&self) -> Result<(), IoError> {
-        create_directories_if_needed(&self.path);
-        let file = File::create(&self.path).map_err(|e| IoError::new(e.to_string()))?;
-        let mut writer = Serializer::new(file);
-        self.serialize(&mut writer)
-            .map_err(|e| IoError::new(e.to_string()))?;
-        return Ok(());
+    fn get_path(&self) -> &str{
+        return &self.path;
     }
 }
 

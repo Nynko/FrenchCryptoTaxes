@@ -5,10 +5,7 @@ use serde_json::to_string;
 use crate::{
     functions::{calculate_full_cost_basis, calculate_tax_gains},
     structs::{
-        portfolio_manager::{self, PortfolioManager},
-        wallet_manager::{self, WalletManager},
-        GlobalCostBasis, Owner, Platform, Taxable, TradeType, Transaction, TransactionBase,
-        Wallet, WalletBase, WalletSnapshot,
+        portfolio_manager::{self, PortfolioManager}, wallet_manager::{self, WalletManager}, GlobalCostBasis, Owner, Persistable, Platform, Taxable, TradeType, Transaction, TransactionBase, Wallet, WalletBase, WalletSnapshot
     },
 };
 

@@ -1,14 +1,9 @@
 use hashbrown::HashSet;
-use std::fs::{self, File};
-
-use rmp_serde::Serializer;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    errors::IoError,
-    structs::{Transaction, TransactionId},
-    utils::{create_directories_if_needed, file_exists},
-};
+use crate::structs::{Transaction, TransactionId};
+
+use super::Persistable;
 
 /* This transaction manager will handle saving the data and loading the previous data if they exist, the merging
 of data and it will implement de Drop trait to save when reference is dropped */
@@ -19,48 +14,30 @@ pub struct TransactionManager {
     path: String,
 }
 
-impl TransactionManager {
-    pub const PATH: &'static str = ".data/transactions";
+impl Persistable for TransactionManager {
+    const PATH: &'static str = ".data/transactions";
 
-    pub fn new(path: Option<String>) -> Result<Self, IoError> {
-        // Load wallets here or create empty Vec
-        let path = path.unwrap_or(Self::PATH.to_string());
-        if !file_exists(&path) {
-            return Ok(Self {
-                transactions: Vec::new(),
-                hash_set: HashSet::new(),
-                path,
-            });
-        } else {
-            let file = File::open(path).map_err(|e| IoError::new(e.to_string()))?;
-            let deserialized_map: TransactionManager =
-                rmp_serde::from_read(file).map_err(|e| IoError::new(e.to_string()))?;
-            return Ok(deserialized_map);
+    fn default_new(path: String) -> Self {
+        Self {
+            transactions: Vec::new(),
+            hash_set: HashSet::new(),
+            path,
         }
     }
 
+    fn get_path(&self) -> &str{
+        return &self.path;
+    }
+}
+
+
+impl TransactionManager {
     pub fn get(&self) -> &Vec<Transaction> {
         return &self.transactions;
     }
 
     pub fn get_mut(&mut self) -> &mut Vec<Transaction> {
         return &mut self.transactions;
-    }
-
-    pub fn save(&self) -> Result<(), IoError> {
-        create_directories_if_needed(&self.path);
-        let file = File::create(&self.path).map_err(|e| IoError::new(e.to_string()))?;
-        let mut writer = Serializer::new(file);
-        self.serialize(&mut writer)
-            .map_err(|e| IoError::new(e.to_string()))?;
-        return Ok(());
-    }
-
-    pub fn delete(&self) -> Result<(), IoError> {
-        if file_exists(&self.path) {
-            fs::remove_file(&self.path).map_err(|e| IoError::new(e.to_string()))?;
-        }
-        Ok(())
     }
 
     /* Add transaction by avoiding duplicates */

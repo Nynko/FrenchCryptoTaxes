@@ -8,7 +8,7 @@ pub mod utils;
 use api::handle_kraken_data;
 use dotenv::dotenv;
 use functions::{calculate_full_cost_basis, calculate_tax_gains};
-use structs::{Transaction, TransactionManager, WalletManager};
+use structs::{Persistable, Transaction, TransactionManager, WalletManager};
 
 use crate::structs::PortfolioManager;
 
@@ -41,7 +41,7 @@ fn main() {
         match tx {
             Transaction::Trade { taxable, .. } | Transaction::Transfer { taxable, .. } => {
                 if taxable.as_ref().is_some_and(|tax| tax.is_taxable) {
-                    let tax = calculate_tax_gains(tx);
+                    let tax = calculate_tax_gains(&tx);
                     println!("tax: {tax}");
                 } else {
                     ()

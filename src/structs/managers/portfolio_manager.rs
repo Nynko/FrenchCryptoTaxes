@@ -1,17 +1,15 @@
-use std::fs::{self, File};
-
 use hashbrown::HashMap;
-use rmp_serde::Serializer;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     api::get_price_api,
-    errors::{IoError, PortfolioHistoryError},
+    errors::PortfolioHistoryError,
     structs::{Transaction, TransactionId, Wallet, WalletId, WalletSnapshot},
-    utils::{create_directories_if_needed, file_exists},
 };
+
+use super::Persistable;
 
 /* This manager is used for associating the price and the balance of a wallet at a time "t" => associated with a transaction
 This allow to save the history of price of the asset for calculating the full value of the portfolio without
@@ -25,40 +23,30 @@ pub struct PortfolioManager {
     path: String,
 }
 
+
+impl Persistable for PortfolioManager {
+    const PATH:  &'static str = ".data/portfolio_history";
+
+    fn default_new(path: String) -> Self {
+        Self {
+            portfolio_history: HashMap::new(),
+            path,
+        }
+    }
+
+    fn get_path(&self) -> &str{
+        return &self.path;
+    }
+}
+
+impl Drop for PortfolioManager {
+    fn drop(&mut self) {
+        let _save = self.save();
+    }
+}
+
+
 impl PortfolioManager {
-    pub const PATH: &'static str = ".data/portfolio_history";
-
-    pub fn new(path: Option<String>) -> Result<Self, IoError> {
-        // Load wallets here or create empty Vec
-        let path = path.unwrap_or(Self::PATH.to_string());
-        if !file_exists(&path) {
-            return Ok(Self {
-                portfolio_history: HashMap::new(),
-                path,
-            });
-        } else {
-            let file = File::open(path).map_err(|e| IoError::new(e.to_string()))?;
-            let deserialized_map: PortfolioManager =
-                rmp_serde::from_read(file).map_err(|e| IoError::new(e.to_string()))?;
-            return Ok(deserialized_map);
-        }
-    }
-
-    pub fn save(&self) -> Result<(), IoError> {
-        create_directories_if_needed(&self.path);
-        let file = File::create(&self.path).map_err(|e| IoError::new(e.to_string()))?;
-        let mut writer = Serializer::new(file);
-        self.serialize(&mut writer)
-            .map_err(|e| IoError::new(e.to_string()))?;
-        return Ok(());
-    }
-
-    pub fn delete(&self) -> Result<(), IoError> {
-        if file_exists(&self.path) {
-            fs::remove_file(&self.path).map_err(|e| IoError::new(e.to_string()))?;
-        }
-        Ok(())
-    }
 
     #[tokio::main]
     pub async fn calculate_portfolio_history_and_update_tx(
@@ -72,6 +60,34 @@ impl PortfolioManager {
                 self.portfolio_history.insert(tx.get_tx_base().id.to_string(), HashMap::new());
             }
             self._calculate(tx, &mut state, wallets).await?;
+            match tx {
+                Transaction::Trade {
+                    tx: base, taxable, ..
+                }
+                | Transaction::Transfer {
+                    tx: base, taxable, ..
+                } => {
+                    if let Some(tax) = taxable {
+                        if tax.is_taxable {
+                            tax.pf_total_value = self.calculate_total_value(&base.id).unwrap();
+                            tax.is_pf_total_calculated = true;
+                        }
+                    }
+                }
+                _ => (),
+            }
+        }
+        Ok(())
+    }
+
+
+    /* Implies that the portfolio has already been calculated */
+    #[tokio::main]
+    pub async fn update_tx_with_portfolio_value(
+        &mut self,
+        txs: &mut Vec<Transaction>,
+    ) -> Result<(), PortfolioHistoryError> {
+        for tx in txs {
             match tx {
                 Transaction::Trade {
                     tx: base, taxable, ..
@@ -315,8 +331,4 @@ impl PortfolioManager {
     }
 }
 
-impl Drop for PortfolioManager {
-    fn drop(&mut self) {
-        let _save = self.save();
-    }
-}
+
