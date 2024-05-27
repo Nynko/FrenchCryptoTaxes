@@ -12,6 +12,3 @@ pub use global_cost_basis_manager::*;
 
 pub mod persistable;
 pub use persistable::*;
-
-pub mod taxable_managers;
-pub use taxable_managers::*;

@@ -1,4 +1,5 @@
-use crate::structs::{GlobalCostBasis, Taxable, TradeType, Transaction, TransactionBase, WalletSnapshot};
+use crate::structs::{GlobalCostBasis, Portfolio, TradeType, Transaction, TransactionId, WalletSnapshot};
+use hashbrown::HashMap;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 
@@ -8,25 +9,24 @@ plus_value =  prix_cession - (acquisition_pf_net * prix_cession / valeur_pf )
 
 The transaction must be taxable, otherwise it will panic !
 */
-pub fn calculate_tax_gains(tx: &Transaction) -> Decimal {
+pub fn calculate_tax_gains(tx: &Transaction, portfolio: &Portfolio) -> Decimal {
     match tx {
         Transaction::Transfer {
             amount,
-            taxable,
             cost_basis: pf,
+            to,from,
             ..
         }
         | Transaction::Trade {
-            bought_amount: amount,
-            taxable,
+            sold_amount: amount,
             cost_basis: pf,
+            to, from,
             ..
         } => {
-            let taxable = taxable.as_ref().unwrap();
-            let price = taxable.price_eur;
-            let pf_total_value = taxable.pf_total_value;
-            let sell_price: Decimal = Decimal::from(*amount) * price;
-            return _calculate_tax(sell_price, &pf, pf_total_value);
+            let pf_total_value = portfolio.pf_total_value;
+            let sell_price: Decimal = Decimal::from(*amount) * from.price_eur;
+            let fee = to.fee.unwrap_or(dec!(0)) * to.price_eur + from.fee.unwrap_or(dec!(0)) * from.price_eur;
+            return _calculate_tax(sell_price, fee,&pf, pf_total_value);
         }
         _ => dec!(0),
     }
@@ -34,10 +34,11 @@ pub fn calculate_tax_gains(tx: &Transaction) -> Decimal {
 
 pub fn _calculate_tax(
     sell_price: Decimal,
+    total_fee: Decimal,
     pf: &GlobalCostBasis,
     pf_total_value: Decimal,
 ) -> Decimal {
-    return sell_price - calculate_weigted_price(sell_price, pf.pf_cost_basis, pf_total_value);
+    return (sell_price - total_fee) - calculate_weigted_price(sell_price, pf.pf_cost_basis, pf_total_value);
 }
 
 /* (acquisition_pf_net * prix_cession / valeur_pf ) */
@@ -49,37 +50,36 @@ pub fn calculate_weigted_price(
     return current_cost_basis * sell_price / pf_total_value;
 }
 
-pub fn calculate_full_cost_basis(txs: &mut Vec<Transaction>) {
+pub fn calculate_full_cost_basis(txs: &mut Vec<Transaction>, portfolios: &HashMap<TransactionId,Portfolio> ) {
     let mut global_cost_basis = GlobalCostBasis {
         pf_cost_basis: dec!(0),
         pf_total_cost: dec!(0),
     };
     for tx in txs {
-        global_cost_basis = calculate_cost_basis(tx, global_cost_basis);
+        let portfolio = portfolios.get(&tx.get_tx_base().id);
+        global_cost_basis = calculate_cost_basis(tx, portfolio,global_cost_basis);
     }
 }
 
 /* Calculate the cost_basis, here "acquisition_pf_net" */
-pub fn calculate_cost_basis(tx: &mut Transaction, current_pf: GlobalCostBasis) -> GlobalCostBasis {
+pub fn calculate_cost_basis(tx: &mut Transaction, portfolio: Option<&Portfolio>, current_pf: GlobalCostBasis) -> GlobalCostBasis {
     match tx {
         Transaction::Transfer {
             to,
             from,
             amount,
-            taxable,
             cost_basis: pf,
             ..
         } => {
             pf.pf_cost_basis = current_pf.pf_cost_basis;
             pf.pf_total_cost = current_pf.pf_total_cost;
-            return calculate_new_cost_basis(to, from, taxable, &pf, *amount);
+            return calculate_new_cost_basis(to, from, portfolio, &pf, *amount);
         }
         Transaction::Trade {
             to,
             from,
-            bought_amount,
+            sold_amount,
             trade_type,
-            taxable,
             cost_basis: pf,
             ..
         } => {
@@ -89,7 +89,7 @@ pub fn calculate_cost_basis(tx: &mut Transaction, current_pf: GlobalCostBasis) -
             };
             pf.pf_cost_basis = current_pf.pf_cost_basis + added_cost;
             pf.pf_total_cost = current_pf.pf_total_cost + added_cost;
-            return calculate_new_cost_basis(to, from, taxable, &pf, *bought_amount);
+            return calculate_new_cost_basis(to, from, portfolio, &pf, *sold_amount);
         }
         _ => current_pf, // ignoring the fiat deposit and withdrawal as they don't change the cost basis, they are here for accounting
     }
@@ -99,25 +99,26 @@ pub fn calculate_cost_basis(tx: &mut Transaction, current_pf: GlobalCostBasis) -
 fn calculate_new_cost_basis(
     to: &WalletSnapshot,
     from: &WalletSnapshot,
-    taxable: &Option<Taxable>,
+    portfolio: Option<&Portfolio>,
     current_pf: &GlobalCostBasis,
     amount: Decimal,
 ) -> GlobalCostBasis {
     let current_cost_basis = current_pf.pf_cost_basis;
     let current_total_cost = current_pf.pf_total_cost;
 
-    let fee = to.fee.unwrap_or(dec!(0)) * to.price_eur.unwrap_or(dec!(0)) + from.fee.unwrap_or(dec!(0)) * from.price_eur.unwrap_or(dec!(0));
+    let fee = to.fee.unwrap_or(dec!(0)) * to.price_eur + from.fee.unwrap_or(dec!(0)) * from.price_eur;
     let mut cost_basis_adjustment: Decimal = dec!(0.00);
-    if let Some(taxable) = taxable {
-        if taxable.is_taxable {
+    if let Some(portfolio) = portfolio {
+        if portfolio.is_taxable {
             // Selling of Crypto - Taxable event
-            let sell_price: Decimal = Decimal::from(amount) * taxable.price_eur;
+            let sell_price: Decimal = Decimal::from(amount) * from.price_eur;
             let weigted_price =
-                calculate_weigted_price(sell_price, current_cost_basis, taxable.pf_total_value);
+                calculate_weigted_price(sell_price, current_cost_basis, portfolio.pf_total_value);
+                
             cost_basis_adjustment = weigted_price;
         }
     }
-
+    
     return GlobalCostBasis {
         pf_cost_basis: current_cost_basis - cost_basis_adjustment + fee,
         pf_total_cost: current_total_cost + fee,
@@ -128,8 +129,7 @@ fn calculate_new_cost_basis(
 mod tests {
     use chrono::Utc;
 
-    use crate::structs::transaction::Taxable;
-    use crate::structs::{Owner, Platform, Wallet, WalletBase, WalletSnapshot};
+    use crate::structs::{Owner, Platform, TransactionBase, Wallet, WalletBase, WalletSnapshot};
 
     use super::*;
 
@@ -199,21 +199,20 @@ mod tests {
                 id: btc_wallet.get_id().to_string(),
                 pre_tx_balance: dec!(1),
                 fee: Some(fee),
-                price_eur: Some(price_eur_btc),
+                price_eur: price_eur_btc,
             },
             to: WalletSnapshot {
                 id: btc_wallet.get_id().to_string(),
                 pre_tx_balance: dec!(1),
                 fee: None,
-                price_eur: None,
+                price_eur: price_eur_btc,
             },
             amount: dec!(1),
-            taxable: None,
             cost_basis: init_pf,
             income: None,
         };
 
-        let new_pf = calculate_cost_basis(&mut tx, current_pf);
+        let new_pf = calculate_cost_basis(&mut tx, None, current_pf);
 
         assert_eq!(new_pf.pf_total_cost, dec!(500) + fee_eur);
         assert_eq!(new_pf.pf_cost_basis, dec!(500) + fee_eur);
@@ -238,33 +237,35 @@ mod tests {
                 id: btc_wallet.get_id().to_string(),
                 pre_tx_balance: dec!(1),
                 fee: None,
-                price_eur: None,
+                price_eur: dec!(4000),
             },
             to: WalletSnapshot {
                 id: eur_wallet.get_id().to_string(),
                 pre_tx_balance: dec!(1),
                 fee: None,
-                price_eur: None,
+                price_eur: dec!(1),
             },
             exchange_pair: Some(("BTC".to_string(), "EUR".to_uppercase())),
             sold_amount: dec!(5),
             bought_amount: dec!(20000),
             trade_type: TradeType::CryptoToFiat,
-            taxable: Some(Taxable {
-                is_taxable: true,
-                price_eur: dec!(1),
-                pf_total_value: dec!(32000),
-                is_pf_total_calculated: true,
-            }),
             cost_basis: init_pf,
         };
 
-        let new_pf = calculate_cost_basis(&mut tx, current_pf);
+        let portfolio = Portfolio {
+            tx_id: "test".to_string(),
+            wallet_snaps: HashMap::new(),
+            is_taxable: true,
+            pf_total_value: dec!(32000),
+            is_pf_total_calculated: true,
+        };
+
+        let new_pf = calculate_cost_basis(&mut tx,Some(&portfolio), current_pf);
 
         assert_eq!(new_pf.pf_total_cost, dec!(18000));
         assert_eq!(new_pf.pf_cost_basis, dec!(18000) - dec!(11250));
 
-        let gains = calculate_tax_gains(&tx);
+        let gains = calculate_tax_gains(&tx, &portfolio);
         assert_eq!(gains, dec!(8750));
     }
 
@@ -286,13 +287,13 @@ mod tests {
                 id: eur_wallet.get_id().to_string(),
                 pre_tx_balance: dec!(1000),
                 fee: None,
-                price_eur: None,
+                price_eur: dec!(1),
             },
             to: WalletSnapshot {
                 id: btc_wallet.get_id().to_string(),
                 pre_tx_balance: dec!(0),
                 fee: None,
-                price_eur: None,
+                price_eur: dec!(500),
             },
             exchange_pair: Some(("BTC".to_string(), "EUR".to_uppercase())),
             sold_amount: dec!(1000),
@@ -300,11 +301,10 @@ mod tests {
             trade_type: TradeType::FiatToCrypto {
                 local_cost_basis: dec!(1000),
             },
-            taxable: None,
             cost_basis: init_pf.clone(),
         };
 
-        let current_pf = calculate_cost_basis(&mut tx0, init_pf.clone());
+        let current_pf = calculate_cost_basis(&mut tx0, None,init_pf.clone());
 
         let mut tx = Transaction::Trade {
             tx: TransactionBase {
@@ -315,33 +315,35 @@ mod tests {
                 id: btc_wallet.get_id().to_string(),
                 pre_tx_balance: dec!(2),
                 fee: None,
-                price_eur: None,
+                price_eur: dec!(450),
             },
             to: WalletSnapshot {
                 id: eur_wallet.get_id().to_string(),
                 pre_tx_balance: dec!(0),
                 fee: None,
-                price_eur: None,
+                price_eur: dec!(1),
             },
             exchange_pair: Some(("BTC".to_string(), "EUR".to_uppercase())),
             sold_amount: dec!(1),
             bought_amount: dec!(450),
             trade_type: TradeType::CryptoToFiat,
-            taxable: Some(Taxable {
-                is_taxable: true,
-                price_eur: dec!(1),
-                pf_total_value: dec!(1200),
-                is_pf_total_calculated: true,
-            }),
             cost_basis: init_pf.clone(),
         };
 
-        let new_pf = calculate_cost_basis(&mut tx, current_pf);
+        let portfolio = Portfolio {
+            tx_id: "test".to_string(),
+            wallet_snaps: HashMap::new(),
+            is_taxable: true,
+            pf_total_value: dec!(1200),
+            is_pf_total_calculated: true,
+        };
+
+        let new_pf = calculate_cost_basis(&mut tx, Some(&portfolio), current_pf);
 
         assert_eq!(new_pf.pf_total_cost, dec!(1000));
         assert_eq!(new_pf.pf_cost_basis, dec!(1000) - dec!(375));
 
-        let gains = calculate_tax_gains(&tx);
+        let gains = calculate_tax_gains(&tx, &portfolio);
         assert_eq!(gains, dec!(75));
 
         // Price update
@@ -359,34 +361,36 @@ mod tests {
                 id: btc_wallet.get_id().to_string(),
                 pre_tx_balance: dec!(1),
                 fee: None,
-                price_eur: None,
+                price_eur: dec!(1300),
             },
             to: WalletSnapshot {
                 id: eur_wallet.get_id().to_string(),
                 pre_tx_balance: dec!(450),
                 fee: None,
-                price_eur: None,
+                price_eur: dec!(1),
             },
             exchange_pair: None,
             sold_amount: dec!(1),
             bought_amount: dec!(1300),
             trade_type: TradeType::CryptoToFiat,
-            taxable: Some(Taxable {
-                is_taxable: true,
-                price_eur: dec!(1),
-                pf_total_value: dec!(1300),
-                is_pf_total_calculated: true,
-            }),
             cost_basis: init_pf2,
         };
 
-        let new_pf2 = calculate_cost_basis(&mut tx2, new_pf);
+        let portfolio2 = Portfolio {
+            tx_id: "test2".to_string(),
+            wallet_snaps: HashMap::new(),
+            is_taxable: true,
+            pf_total_value: dec!(1300),
+            is_pf_total_calculated: true,
+        };
+
+        let new_pf2 = calculate_cost_basis(&mut tx2, Some(&portfolio2), new_pf);
 
         assert_eq!(new_pf2.pf_total_cost, dec!(1000));
 
         assert_eq!(new_pf2.pf_cost_basis, dec!(0));
 
-        let gains = calculate_tax_gains(&tx2);
+        let gains = calculate_tax_gains(&tx2,&portfolio2);
         assert_eq!(gains, dec!(675));
     }
 }

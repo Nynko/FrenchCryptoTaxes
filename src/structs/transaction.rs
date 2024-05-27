@@ -29,9 +29,7 @@ Deposit: should never be from the same wallet, there is always an "external" wal
 */
 
 pub type TransactionId = String;
-/* We only have two types of transactions here:
-
-A simple fee would be a transfer transaction to a wallet not owned by the user*/
+/* Transaction are meant to be immutable, additionnal data should be held separated in HashMaps<TransactionId,..> for instance */
 #[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum Transaction {
     // Transfer can be a "local" non taxable transfer, it can be a taxable transfer to external entity
@@ -40,20 +38,18 @@ pub enum Transaction {
         from: WalletSnapshot,
         to: WalletSnapshot,
         amount: Decimal,
-        taxable: Option<Taxable>,
         income : Option<Income>, // Income correspond to a Crypto Transfer to from and to the same wallet that can be a reward, a staking interest, an airdrop, a mining, or a payment in crypto 
         cost_basis: GlobalCostBasis,
     },
     // Trade can be a Crypto/Crypto non taxable trade, or taxable sold of Crypto, or non taxable event: buying crypto
     Trade {
-        tx: TransactionBase,
+        tx: TransactionBase, 
         from: WalletSnapshot,
         to: WalletSnapshot,
         exchange_pair: Option<(String, String)>,
         sold_amount: Decimal,
         bought_amount: Decimal,
         trade_type: TradeType,
-        taxable: Option<Taxable>,
         cost_basis: GlobalCostBasis,
     },
     Deposit {
@@ -99,19 +95,6 @@ pub enum IncomeType{
     Other(String)
 }
 
-/*The pf_total_value should be set depending on the global value of the portfolio before each transaction (at least each taxable one).
-It can be caculated from the price of all wallets at an instant t.
-The issue is getting price at instant t may take time (calling API). We want to get that information before actually treating the transaction,
-when we only want it for taxable events.*/
-#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
-pub struct Taxable {
-    // Currently in EUR
-    pub is_taxable: bool,
-    pub price_eur: Decimal,
-    pub pf_total_value: Decimal,      // Portfolio total value in euro
-    pub is_pf_total_calculated: bool, // Each time recalculation is needed, this should be set to false (Recalculation use the PortfolioManager)
-}
-
 #[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionBase {
     pub id: String, // This should not be generated but come from an external source  OR if not possible deterministically created from "uniqueness" element of the transaction (timestamp, fee, wallet_ids...)
@@ -128,14 +111,6 @@ impl Transaction {
         }
     }
 
-    pub fn get_taxable(&self) -> &Option<Taxable> {
-        match self {
-            Transaction::Transfer { taxable, .. } => taxable,
-            Transaction::Trade { taxable, .. } => taxable,
-            _ => &None
-        }
-    }
-
     pub fn is_trade_or_transfer(&self) -> bool {
         match self {
             Transaction::Trade { .. } => true,
@@ -144,13 +119,34 @@ impl Transaction {
             Transaction::Withdrawal { .. } => false,
         }
     }
+    /* To delete after moving the cost basis outside of transaction enum */
+    pub fn tmp_get_cost_basis(&self) -> Option<&GlobalCostBasis> {
+        match self {
+            Transaction::Trade { cost_basis, .. } => Some(cost_basis),
+            Transaction::Transfer { cost_basis, .. } => Some(cost_basis),
+            Transaction::Deposit { .. } => None,
+            Transaction::Withdrawal { .. } => None,
+        }
+    }
+
+    /* Determine if a transaction is taxable (outside of if it has been marked taxable by the user in the portfolio).
+    There is only one case were we know a transaction is for sure taxable: Trading to fiat */
+    pub fn is_taxable(&self) -> bool {
+        match self {
+            Transaction::Trade { trade_type, .. } => match trade_type {
+                TradeType::CryptoToFiat => true,
+                _ => false
+            } ,
+            _ => false
+        }
+    }
 
     pub fn new_deposit(
         tx: TransactionBase,
         to: &Wallet,
         amount: Decimal,
         fee: Option<Decimal>,
-        price_eur: Option<Decimal>,
+        price_eur: Decimal,
     ) -> Result<Self, &'static str> {
         // Ensure the wallet type is Fiat
         if let Wallet::Fiat(_) = to {
@@ -174,7 +170,7 @@ impl Transaction {
         from: &Wallet,
         amount: Decimal,
         fee: Option<Decimal>,
-        price_eur: Option<Decimal>,
+        price_eur: Decimal,
     ) -> Result<Self, &'static str> {
         // Ensure the wallet type is Fiat
         if let Wallet::Fiat(_) = from {

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     api::get_price_api,
     errors::PortfolioHistoryError,
-    structs::{Transaction, TransactionId, Wallet, WalletId, WalletSnapshot},
+    structs::{PortfolioWalletSnapshot, Transaction, TransactionId, Wallet, WalletId, WalletSnapshot},
 };
 
 use super::Persistable;
@@ -19,8 +19,27 @@ If only one wallet is added, then we only have to call one API for this specific
 */
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PortfolioManager {
-    pub portfolio_history: HashMap<TransactionId, HashMap<WalletId, WalletSnapshot>>, // We store only for taxable Transactions
+    pub portfolio_history: HashMap<TransactionId, Portfolio>, // We store only for taxable Transactions
     path: String,
+}
+
+/*The pf_total_value should be set depending on the global value of the portfolio before each transaction (at least each taxable one).
+It can be caculated from the price of all wallets at an instant t.
+The issue is getting price at instant t may take time (calling API). We want to get that information before actually treating the transaction,
+when we only want it for taxable events.*/
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Portfolio{
+    pub tx_id : TransactionId,
+    pub wallet_snaps : HashMap<WalletId, PortfolioWalletSnapshot>,
+    pub is_taxable : bool,
+    pub pf_total_value: Decimal,      // Portfolio total value in euro
+    pub is_pf_total_calculated: bool, // Each time recalculation is needed, this should be set to false (Recalculation use the PortfolioManager)
+}
+
+impl Portfolio {
+    pub fn new(tx_id: String,is_taxable: bool) -> Self{
+        Self { tx_id, wallet_snaps: HashMap::new(), is_taxable, pf_total_value: dec!(0), is_pf_total_calculated: false }
+    }
 }
 
 
@@ -49,94 +68,86 @@ impl Drop for PortfolioManager {
 impl PortfolioManager {
 
     #[tokio::main]
-    pub async fn calculate_portfolio_history_and_update_tx(
-        &mut self,
-        txs: &mut Vec<Transaction>,
-        wallets: &HashMap<String, Wallet>,
-    ) -> Result<(), PortfolioHistoryError> {
-        let mut state: HashMap<WalletId, WalletSnapshot> = HashMap::new();
-        for tx in txs {
-            if  self.portfolio_history.get(&tx.get_tx_base().id).is_none(){
-                self.portfolio_history.insert(tx.get_tx_base().id.to_string(), HashMap::new());
-            }
-            self._calculate(tx, &mut state, wallets).await?;
-            match tx {
-                Transaction::Trade {
-                    tx: base, taxable, ..
-                }
-                | Transaction::Transfer {
-                    tx: base, taxable, ..
-                } => {
-                    if let Some(tax) = taxable {
-                        if tax.is_taxable {
-                            tax.pf_total_value = self.calculate_total_value(&base.id).unwrap();
-                            tax.is_pf_total_calculated = true;
-                        }
-                    }
-                }
-                _ => (),
-            }
-        }
-        Ok(())
-    }
-
-
-    /* Implies that the portfolio has already been calculated */
-    #[tokio::main]
-    pub async fn update_tx_with_portfolio_value(
-        &mut self,
-        txs: &mut Vec<Transaction>,
-    ) -> Result<(), PortfolioHistoryError> {
-        for tx in txs {
-            match tx {
-                Transaction::Trade {
-                    tx: base, taxable, ..
-                }
-                | Transaction::Transfer {
-                    tx: base, taxable, ..
-                } => {
-                    if let Some(tax) = taxable {
-                        if tax.is_taxable {
-                            tax.pf_total_value = self.calculate_total_value(&base.id).unwrap();
-                            tax.is_pf_total_calculated = true;
-                        }
-                    }
-                }
-                _ => (),
-            }
-        }
-        Ok(())
-    }
-
-    pub fn calculate_total_value(&self, tx_id: &TransactionId) -> Option<Decimal> {
-        return self.portfolio_history.get(tx_id).map(|wallet_map| {
-            wallet_map.values().fold(Decimal::new(0, 0), |acc, wallet| {
-                acc + wallet.pre_tx_balance * wallet.price_eur.unwrap()
-            })
-        });
-    }
-
-    #[tokio::main]
     pub async fn calculate_portfolio_history(
         &mut self,
         txs: &Vec<Transaction>,
         wallets: &HashMap<String, Wallet>,
     ) -> Result<(), PortfolioHistoryError> {
-        let mut state: HashMap<WalletId, WalletSnapshot> = HashMap::new();
+        let mut state: HashMap<WalletId, PortfolioWalletSnapshot> = HashMap::new();
         for tx in txs {
-            if  self.portfolio_history.get(&tx.get_tx_base().id).is_none(){
-                self.portfolio_history.insert(tx.get_tx_base().id.to_string(), HashMap::new());
+            let is_taxable = tx.is_taxable();
+            let tx_id = tx.get_tx_base().id.clone();
+            if  self.portfolio_history.get(&tx_id).is_none(){
+                self.portfolio_history.insert(tx_id.to_string(), Portfolio::new(tx_id.to_string(),is_taxable));
             }
-            self._calculate(tx, &mut state, wallets).await?;
+            self._calculate(tx, is_taxable,&mut state, wallets).await?;
+            if is_taxable{
+                let pf_total_value = self.calculate_total_value(&tx_id).unwrap();
+                let portfolio = self.portfolio_history.get_mut(&tx_id).unwrap();
+                portfolio.pf_total_value = pf_total_value;
+                portfolio.is_pf_total_calculated = true;
+            }
         }
         Ok(())
     }
 
-    /* Return is_taxable */
+
+    // /* Implies that the portfolio has already been calculated */
+    // #[tokio::main]
+    // pub async fn update_tx_with_portfolio_value(
+    //     &mut self,
+    //     txs: &mut Vec<Transaction>,
+    // ) -> Result<(), PortfolioHistoryError> {
+    //     for tx in txs {
+    //         match tx {
+    //             Transaction::Trade {
+    //                 tx: base, taxable, ..
+    //             }
+    //             | Transaction::Transfer {
+    //                 tx: base, taxable, ..
+    //             } => {
+    //                 if let Some(tax) = taxable {
+    //                     if tax.is_taxable {
+    //                         tax.pf_total_value = self.calculate_total_value(&base.id).unwrap();
+    //                         tax.is_pf_total_calculated = true;
+    //                     }
+    //                 }
+    //             }
+    //             _ => (),
+    //         }
+    //     }
+    //     Ok(())
+    // }
+
+    pub fn calculate_total_value(&self, tx_id: &TransactionId) -> Option<Decimal> {
+        return self.portfolio_history.get(tx_id).map(|portfolio| {
+            portfolio.wallet_snaps.values().fold(Decimal::new(0, 0), |acc, wallet| {
+                acc + wallet.pre_tx_balance * wallet.price_eur.unwrap()
+            })
+        });
+    }
+
+    // #[tokio::main]
+    // pub async fn calculate_portfolio_history(
+    //     &mut self,
+    //     txs: &Vec<Transaction>,
+    //     wallets: &HashMap<String, Wallet>,
+    // ) -> Result<(), PortfolioHistoryError> {
+    //     let mut state: HashMap<WalletId, WalletSnapshot> = HashMap::new();
+    //     for tx in txs {
+    //         if  self.portfolio_history.get(&tx.get_tx_base().id).is_none(){
+    //             self.portfolio_history.insert(tx.get_tx_base().id.to_string(), HashMap::new());
+    //         }
+    //         self._calculate(tx, &mut state, wallets).await?;
+    //     }
+    //     Ok(())
+    // }
+
     async fn _calculate(
         &mut self,
         transaction: &Transaction,
-        previous_state: &mut HashMap<WalletId, WalletSnapshot>,
+        is_taxable: bool,
+        previous_state: &mut HashMap<WalletId, PortfolioWalletSnapshot>,
         wallets: &HashMap<String, Wallet>,
     ) -> Result<(), PortfolioHistoryError> {
         match transaction {
@@ -144,7 +155,6 @@ impl PortfolioManager {
                 tx,
                 from,
                 to,
-                taxable,
                 sold_amount,
                 bought_amount,
                 ..
@@ -154,12 +164,13 @@ impl PortfolioManager {
 
                 self.insert_balance_from_wallet(&tx.id,from_wallet, from, previous_state)?;
 
-                if taxable.as_ref().is_some_and(|tax| tax.is_taxable) {
+                if is_taxable {
                     // If taxable we need the price and to insert/update the history
                     let new_state = self
                         .get_price_if_needed(previous_state, transaction, wallets)
                         .await?;
-                    self.portfolio_history.insert(tx.id.clone(), new_state);
+                    let portfolio = self.portfolio_history.get_mut(&tx.id).unwrap();
+                    portfolio.wallet_snaps = new_state;
                 }
 
                 self.update_balance_from_wallet(
@@ -176,7 +187,6 @@ impl PortfolioManager {
                 from,
                 to,
                 amount,
-                taxable,
                 ..
             } => {
                 let from_wallet = wallets.get(&from.id);
@@ -184,12 +194,13 @@ impl PortfolioManager {
 
                 self.insert_balance_from_wallet(&tx.id,from_wallet, from, previous_state)?;
 
-                if taxable.as_ref().is_some_and(|tax| tax.is_taxable) {
+                if is_taxable {
                     // If taxable we need the price and to insert/update the history
                     let new_state = self
                         .get_price_if_needed(previous_state, transaction, wallets)
                         .await?;
-                    self.portfolio_history.insert(tx.id.clone(), new_state);
+                    let portfolio = self.portfolio_history.get_mut(&tx.id).unwrap();
+                    portfolio.wallet_snaps = new_state;
                 }
 
                 self.update_balance_from_wallet(
@@ -211,7 +222,7 @@ impl PortfolioManager {
         tx_id: &String,
         from: Option<&Wallet>,
         from_snap: &WalletSnapshot,
-        previous_state: &mut HashMap<WalletId, WalletSnapshot>,
+        previous_state: &mut HashMap<WalletId, PortfolioWalletSnapshot>,
     ) -> Result<(), PortfolioHistoryError> {
         if let Some(Wallet::Crypto(base)) = from {
             let previous_snap = previous_state.get_mut(&base.id);
@@ -226,12 +237,13 @@ impl PortfolioManager {
                         "Mismatch calculated balance: {} - balance from data {} - wallet_id: {} - for currency: {}",
                         prev_snap.pre_tx_balance, from_snap.pre_tx_balance,base.id,base.currency
                     );
-                } else if from_snap.price_eur.is_some(){
-                    self.portfolio_history.get_mut(tx_id).unwrap().insert(base.id.clone(), from_snap.clone());
+                } else {
+                    self.portfolio_history.get_mut(tx_id).unwrap().wallet_snaps.insert(base.id.clone(), from_snap.to_portfolio());
                 }
             } else {
-                previous_state.insert(base.id.clone(), from_snap.clone());
-                self.portfolio_history.get_mut(tx_id).unwrap().insert(base.id.clone(), from_snap.clone());
+                let snap = from_snap.to_portfolio();
+                previous_state.insert(base.id.clone(), snap.clone());
+                self.portfolio_history.get_mut(tx_id).unwrap().wallet_snaps.insert(base.id.clone(), snap);
             }
         }
         Ok(())
@@ -258,7 +270,7 @@ impl PortfolioManager {
         from: Option<&Wallet>,
         amount: &Decimal,
         tx_id: TransactionId,
-        previous_state: &mut HashMap<WalletId, WalletSnapshot>,
+        previous_state: &mut HashMap<WalletId, PortfolioWalletSnapshot>,
     ) -> Result<(), PortfolioHistoryError> {
         if let Some(Wallet::Crypto(base)) = from {
             let wallet_snap = previous_state.get_mut(&base.id);
@@ -278,7 +290,7 @@ impl PortfolioManager {
         to: Option<&Wallet>,
         tx_wallet_snap: &WalletSnapshot,
         amount: &Decimal,
-        previous_state: &mut HashMap<WalletId, WalletSnapshot>,
+        previous_state: &mut HashMap<WalletId, PortfolioWalletSnapshot>,
     ) {
         if let Some(Wallet::Crypto(base)) = to {
             let wallet_snap = previous_state.get_mut(&base.id);
@@ -289,7 +301,7 @@ impl PortfolioManager {
                 let fee = tx_wallet_snap.fee.unwrap_or(dec!(0));
                 previous_state.insert(
                     base.id.clone(),
-                    WalletSnapshot {
+                    PortfolioWalletSnapshot {
                         id: base.id.to_string(),
                         pre_tx_balance: tx_wallet_snap.pre_tx_balance + *amount - fee,
                         fee: tx_wallet_snap.fee,
@@ -302,16 +314,16 @@ impl PortfolioManager {
 
     async fn get_price_if_needed(
         &self,
-        state: &mut HashMap<WalletId, WalletSnapshot>,
+        state: &mut HashMap<WalletId, PortfolioWalletSnapshot>,
         transaction: &Transaction,
         wallets: &HashMap<String, Wallet>,
-    ) -> Result<HashMap<WalletId, WalletSnapshot>, PortfolioHistoryError> {
+    ) -> Result<HashMap<WalletId, PortfolioWalletSnapshot>, PortfolioHistoryError> {
         let tx = transaction.get_tx_base();
         let existing_state = self.portfolio_history.get(&tx.id);
         for (id, wallet_snap) in &mut *state {
-            if let Some(ref prev) = existing_state {
+            if let Some(ref portfolio) = existing_state {
                 // If the state existed before, we can try to get the previous calculated prices
-                let previous_wallet = prev.get(id);
+                let previous_wallet = portfolio.wallet_snaps.get(id);
                 if previous_wallet.is_some() && previous_wallet.unwrap().price_eur.is_some() {
                     // Update the state with existing values price
                     wallet_snap.price_eur = previous_wallet.unwrap().price_eur;

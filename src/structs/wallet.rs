@@ -126,9 +126,30 @@ transfer with fee would make a taxable event.
 This is a choice, and tax over fees are possible to be implemented.
 */
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct WalletSnapshot {
+pub struct _WalletSnapshot<Price>
+where
+    Price: Eq + PartialEq,
+{
     pub id: WalletId,
     pub pre_tx_balance: Decimal,
-    pub price_eur: Option<Decimal>,
+    pub price_eur: Price, 
     pub fee: Option<Decimal>,
+}
+
+
+// About Price: 
+// For transaction: we need the price associated with the amount for taxable trade/transfer or if there is a fee. To ensure immutability of the data, it is preferable to just get the price everytime + it is something usually useful for user experience.
+// For Portfolio: we want the price to be optional to only get the price when we want
+pub type WalletSnapshot = _WalletSnapshot<Decimal>;
+pub type PortfolioWalletSnapshot = _WalletSnapshot<Option<Decimal>>;
+
+impl WalletSnapshot {
+    pub fn to_portfolio(&self) -> PortfolioWalletSnapshot{
+        return PortfolioWalletSnapshot{
+            id: self.id.clone(),
+            pre_tx_balance: self.pre_tx_balance,
+            price_eur: Some(self.price_eur),
+            fee: self.fee,
+        }
+    }
 }

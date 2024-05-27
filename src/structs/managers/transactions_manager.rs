@@ -96,7 +96,7 @@ mod tests {
     use rust_decimal_macros::dec;
     use serial_test::serial;
 
-    use crate::structs::{GlobalCostBasis, Taxable, TradeType, TransactionBase, WalletSnapshot};
+    use crate::structs::{GlobalCostBasis, TradeType, TransactionBase, WalletSnapshot};
 
     use super::*;
 
@@ -115,24 +115,18 @@ mod tests {
                 id: "btc".to_string(),
                 pre_tx_balance: dec!(1),
                 fee: None,
-                price_eur: None,
+                price_eur: dec!(0),
             },
             to: WalletSnapshot {
                 id: "eur".to_string(),
                 pre_tx_balance: dec!(0),
                 fee: None,
-                price_eur: None,
+                price_eur: dec!(0),
             },
             exchange_pair: None,
             sold_amount: dec!(1),
             bought_amount: dec!(1300),
             trade_type: TradeType::CryptoToFiat,
-            taxable: Some(Taxable {
-                is_taxable: true,
-                price_eur: dec!(1),
-                pf_total_value: dec!(1300),
-                is_pf_total_calculated: true,
-            }),
             cost_basis: GlobalCostBasis {
                 pf_cost_basis: dec!(0),
                 pf_total_cost: dec!(0),
@@ -148,19 +142,18 @@ mod tests {
                 id: "btc".to_string(),
                 pre_tx_balance: dec!(1),
                 fee: None,
-                price_eur: None,
+                price_eur: dec!(0),
             },
             to: WalletSnapshot {
                 id: "eur".to_string(),
                 pre_tx_balance: dec!(0),
                 fee: None,
-                price_eur: None,
+                price_eur: dec!(0),
             },
             exchange_pair: None,
-            sold_amount: dec!(1),
-            bought_amount: dec!(1300),
+            sold_amount: dec!(2),
+            bought_amount: dec!(1400),
             trade_type: TradeType::CryptoToFiat,
-            taxable: None,
             cost_basis: GlobalCostBasis {
                 pf_cost_basis: dec!(0),
                 pf_total_cost: dec!(0),
@@ -175,7 +168,7 @@ mod tests {
         assert_eq!(tx_manager.transactions.len(), 1);
         assert_eq!(tx_manager.transactions[0], tx1);
 
-        tx_manager.delete();
+        let _ = tx_manager.delete();
     }
 
     #[test]
@@ -193,24 +186,18 @@ mod tests {
                 id: "btc".to_string(),
                 pre_tx_balance: dec!(1),
                 fee: None,
-                price_eur: None,
+                price_eur: dec!(0),
             },
             to: WalletSnapshot {
                 id: "eur".to_string(),
                 pre_tx_balance: dec!(0),
                 fee: None,
-                price_eur: None,
+                price_eur: dec!(0),
             },
             exchange_pair: None,
             sold_amount: dec!(1),
             bought_amount: dec!(1300),
             trade_type: TradeType::CryptoToFiat,
-            taxable: Some(Taxable {
-                is_taxable: true,
-                price_eur: dec!(1),
-                pf_total_value: dec!(1300),
-                is_pf_total_calculated: true,
-            }),
             cost_basis: GlobalCostBasis {
                 pf_cost_basis: dec!(0),
                 pf_total_cost: dec!(0),
@@ -226,19 +213,18 @@ mod tests {
                 id: "btc".to_string(),
                 pre_tx_balance: dec!(1),
                 fee: None,
-                price_eur: None,
+                price_eur: dec!(0),
             },
             to: WalletSnapshot {
                 id: "eur".to_string(),
                 pre_tx_balance: dec!(0),
                 fee: None,
-                price_eur: None,
+                price_eur: dec!(0),
             },
             exchange_pair: None,
-            sold_amount: dec!(1),
-            bought_amount: dec!(1300),
+            sold_amount: dec!(21),
+            bought_amount: dec!(1400),
             trade_type: TradeType::CryptoToFiat,
-            taxable: None,
             cost_basis: GlobalCostBasis {
                 pf_cost_basis: dec!(0),
                 pf_total_cost: dec!(0),

@@ -27,7 +27,7 @@ fn main() {
     println!("{:?}", transactions_manager.get());
 
     portfolio_manager
-        .calculate_portfolio_history_and_update_tx(
+        .calculate_portfolio_history(
             transactions_manager.get_mut(),
             &wallet_manager.wallets,
         )
@@ -35,19 +35,19 @@ fn main() {
 
     println!("{:?}", portfolio_manager.portfolio_history);
 
-    calculate_full_cost_basis(transactions_manager.get_mut());
+    // calculate_full_cost_basis(transactions_manager.get_mut());
 
-    for tx in transactions_manager.get() {
-        match tx {
-            Transaction::Trade { taxable, .. } | Transaction::Transfer { taxable, .. } => {
-                if taxable.as_ref().is_some_and(|tax| tax.is_taxable) {
-                    let tax = calculate_tax_gains(&tx);
-                    println!("tax: {tax}");
-                } else {
-                    ()
-                }
-            }
-            _ => (),
-        }
-    }
+    // for tx in transactions_manager.get() {
+    //     match tx {
+    //         Transaction::Trade { taxable, .. } | Transaction::Transfer { taxable, .. } => {
+    //             if taxable.as_ref().is_some_and(|tax| tax.is_taxable) {
+    //                 let tax = calculate_tax_gains(&tx);
+    //                 println!("tax: {tax}");
+    //             } else {
+    //                 ()
+    //             }
+    //         }
+    //         _ => (),
+    //     }
+    // }
 }

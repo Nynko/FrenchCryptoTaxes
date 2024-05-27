@@ -10,7 +10,6 @@ use crate::{
     },
     errors::{ApiError, MappingError},
     structs::{
-        transaction::Taxable,
         wallet::{Owner, Platform, WalletBase},
         wallet_manager::WalletManager,
         GlobalCostBasis, TradeType, Transaction, TransactionBase, Wallet, WalletSnapshot,
@@ -92,7 +91,6 @@ pub async fn create_kraken_txs(
 
                 let time = entry.time;
                 let fee_and_entry = get_fee(selling, buying)?;
-                let mut taxable: Option<Taxable> = None;
                 let mut trade_type = TradeType::CryptoToCrypto;
 
                 // Handle taxable or not
@@ -108,18 +106,12 @@ pub async fn create_kraken_txs(
                                 .await?;
                     }
                     let is_taxable = true;
-                    taxable = Some(Taxable {
-                        is_taxable,
-                        price_eur: bought_price_eur,
-                        pf_total_value: dec!(0),
-                        is_pf_total_calculated: false,
-                    });
                 } else if let Some(fiat) = FiatKraken::from_str(&sold_currency) {
                     let price_sold_currency: Decimal;
                     if fiat.is_eur() {
                         price_sold_currency = dec!(1);
                     } else if wallet_from.fee.is_some() {
-                        price_sold_currency = wallet_from.price_eur.unwrap();
+                        price_sold_currency = wallet_from.price_eur;
                     } else {
                         let time = buying.time;
                         price_sold_currency =
@@ -148,7 +140,6 @@ pub async fn create_kraken_txs(
                     sold_amount: selling_amount,
                     bought_amount: buying.amount,
                     trade_type,
-                    taxable,
                     cost_basis,
                 };
                 txs.push(tx);
@@ -381,7 +372,7 @@ async fn create_or_get_wallet(
             id: id,
             pre_tx_balance,
             fee: Some(fee),
-            price_eur: fee_price,
+            price_eur: fee_price.unwrap(),
         });
     } else {
         let wallet_from: Wallet;
@@ -407,7 +398,7 @@ async fn create_or_get_wallet(
             id: wallet_id,
             pre_tx_balance,
             fee:Some(fee),
-            price_eur: fee_price,
+            price_eur: fee_price.unwrap(),
         });
     }
 }
