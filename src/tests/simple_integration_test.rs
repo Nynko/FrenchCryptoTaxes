@@ -3,9 +3,9 @@ use rust_decimal_macros::dec;
 use serde_json::to_string;
 
 use crate::{
-    functions::{calculate_full_cost_basis, calculate_tax_gains},
+    functions::calculate_tax_gains,
     structs::{
-        portfolio_manager::{self, PortfolioManager}, wallet_manager::{self, WalletManager}, GlobalCostBasis, Owner, Persistable, Platform, TradeType, Transaction, TransactionBase, Wallet, WalletBase, WalletSnapshot
+        portfolio_manager::{self, PortfolioManager}, wallet_manager::{self, WalletManager}, GlobalCostBasis, GlobalCostBasisManager, Owner, Persistable, Platform, TradeType, Transaction, TransactionBase, Wallet, WalletBase, WalletSnapshot
     },
 };
 
@@ -144,8 +144,8 @@ fn simple_two_trades() {
     assert_eq!(portfolio_manager.portfolio_history.get(&transactions[2].get_tx_base().id).unwrap().pf_total_value, dec!(1300));
 
 
-
-    calculate_full_cost_basis(&mut transactions, &portfolio_manager.portfolio_history);
+    let mut cost_basis_manager = GlobalCostBasisManager::new(Some(".data_test/global_cost_basis".to_string())).unwrap();
+    cost_basis_manager.calculate_full_cost_basis(&mut transactions, &portfolio_manager.portfolio_history);
     assert_eq!(transactions.get(1).unwrap().tmp_get_cost_basis().unwrap().pf_total_cost, dec!(1000));
     assert_eq!(transactions.get(1).unwrap().tmp_get_cost_basis().unwrap().pf_cost_basis, dec!(1000));
     assert_eq!(transactions.get(2).unwrap().tmp_get_cost_basis().unwrap().pf_total_cost, dec!(1000));

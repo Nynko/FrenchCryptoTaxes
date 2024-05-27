@@ -7,7 +7,7 @@ pub mod tests;
 pub mod utils;
 use api::handle_kraken_data;
 use dotenv::dotenv;
-use functions::{calculate_full_cost_basis, calculate_tax_gains};
+use functions::{calculate_tax_gains};
 use structs::{Persistable, Transaction, TransactionManager, WalletManager};
 
 use crate::structs::PortfolioManager;
