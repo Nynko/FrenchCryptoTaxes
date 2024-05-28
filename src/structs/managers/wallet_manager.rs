@@ -60,7 +60,7 @@ mod tests {
     #[test]
     fn test_save() {
         let mut wallet_manager =
-            WalletManager::new(Some(".data_test/wallet".to_string())).unwrap();
+            WalletManager::new_with_path(".data_test/wallet".to_string()).unwrap();
 
         wallet_manager.wallet_ids.ids.insert(
             ("test".to_string(), Platform::Binance, None),
@@ -69,7 +69,7 @@ mod tests {
 
         wallet_manager.save().unwrap();
 
-        let wallet_manager2 = WalletManager::new(Some(".data_test/wallet".to_string())).unwrap();
+        let wallet_manager2 = WalletManager::new_with_path(".data_test/wallet".to_string()).unwrap();
 
         assert_eq!(
             wallet_manager2
@@ -83,7 +83,7 @@ mod tests {
     fn test_drop() {
         {
             let mut wallet_manager =
-                WalletManager::new(Some(".data_test/wallet_drop".to_string())).unwrap();
+                WalletManager::new_with_path(".data_test/wallet_drop".to_string()).unwrap();
 
             wallet_manager.wallet_ids.ids.insert(
                 ("test2".to_string(), Platform::Binance, None),
@@ -92,7 +92,7 @@ mod tests {
         }
 
         let wallet_manager =
-            WalletManager::new(Some(".data_test/wallet_drop".to_string())).unwrap();
+            WalletManager::new_with_path(".data_test/wallet_drop".to_string()).unwrap();
 
         assert_eq!(
             wallet_manager
@@ -107,7 +107,7 @@ mod tests {
     #[serial]
     fn test_drop_after_panic() {
         let mut wallet_manager =
-            WalletManager::new(Some(".data_test/wallet_drop_panic".to_string())).unwrap();
+            WalletManager::new_with_path(".data_test/wallet_drop_panic".to_string()).unwrap();
         wallet_manager.wallet_ids.ids.insert(
             ("test3".to_string(), Platform::Binance, None),
             "test3".to_string(),
@@ -120,7 +120,7 @@ mod tests {
     fn test_drop_after_panic_part2() {
         sleep(Duration::from_millis(10));
         let wallet_manager =
-            WalletManager::new(Some(".data_test/wallet_drop_panic".to_string())).unwrap();
+            WalletManager::new_with_path(".data_test/wallet_drop_panic".to_string()).unwrap();
         assert_eq!(
             wallet_manager
                 .wallet_ids

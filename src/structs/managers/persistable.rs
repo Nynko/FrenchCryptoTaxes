@@ -12,7 +12,15 @@ use crate::utils::{create_directories_if_needed, file_exists};
 pub trait Persistable: Serialize + DeserializeOwned {
     const PATH: &'static str;
 
-    fn new(path:Option<String>)-> Result<Self, IoError>
+    fn new()-> Result<Self, IoError>
+    where
+        Self: Sized
+    {
+        return Self::_new(Self::PATH.to_string(),true);
+    }
+
+
+    fn new_with_path(path:String)-> Result<Self, IoError>
     where
         Self: Sized
     {
@@ -23,14 +31,13 @@ pub trait Persistable: Serialize + DeserializeOwned {
     where
         Self: Sized
     {
-        return Self::_new(Some(".data/non_persistent".to_string()),false);
+        return Self::_new(".data/non_persistent".to_string(),false);
     }
 
-    fn _new(path: Option<String>, persist: bool) -> Result<Self, IoError>
+    fn _new(path: String, persist: bool) -> Result<Self, IoError>
     where
         Self: Sized,
     {
-        let path = path.unwrap_or(Self::PATH.to_string());
         if !file_exists(&path) {
             return Ok(Self::default_new(path,persist));
         } else {

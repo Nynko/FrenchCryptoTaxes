@@ -15,10 +15,10 @@ use crate::structs::PortfolioManager;
 fn main() {
     dotenv().ok();
 
-    let mut wallet_manager = WalletManager::new(None).unwrap();
-    let mut transactions_manager = TransactionManager::new(None).unwrap();
-    let mut portfolio_manager = PortfolioManager::new(None).unwrap();
-    let mut global_cost_basis_manager = GlobalCostBasisManager::new(None).unwrap();
+    let mut wallet_manager = WalletManager::new().unwrap();
+    let mut transactions_manager = TransactionManager::new().unwrap();
+    let mut portfolio_manager = PortfolioManager::new().unwrap();
+    let mut global_cost_basis_manager = GlobalCostBasisManager::new().unwrap();
 
     let kraken_txs = handle_kraken_data(&mut wallet_manager).unwrap();
     transactions_manager.extend_update(kraken_txs);

@@ -84,7 +84,7 @@ fn simple_two_trades() {
     let transactions = vec![tx0, tx1, tx2];
 
     let mut wallet_manager =
-        WalletManager::new(Some(".data_test/simple_trade_wallet".to_string())).unwrap();
+        WalletManager::new_non_persistent().unwrap();
 
     wallet_manager.wallets.insert(
         "btc".to_string(),
@@ -113,7 +113,7 @@ fn simple_two_trades() {
     );
 
     let mut portfolio_manager =
-        PortfolioManager::new(Some(".data_test/simple_trade".to_string())).unwrap();
+        PortfolioManager::new_non_persistent().unwrap();
 
     portfolio_manager
         .calculate_portfolio_history(&transactions, &wallet_manager.wallets)
@@ -126,7 +126,7 @@ fn simple_two_trades() {
     assert_eq!(portfolio_manager.portfolio_history.get(tx_id_2).unwrap().pf_total_value, dec!(1300));
 
 
-    let mut cost_basis_manager = GlobalCostBasisManager::new(Some(".data_test/global_cost_basis".to_string())).unwrap();
+    let mut cost_basis_manager = GlobalCostBasisManager::new_non_persistent().unwrap();
     cost_basis_manager.calculate_full_cost_basis(&transactions, &portfolio_manager.portfolio_history);
     assert_eq!(cost_basis_manager.global_cost_basis_history.get(tx_id_1).unwrap().pf_total_cost, dec!(1000));
     assert_eq!(cost_basis_manager.global_cost_basis_history.get(tx_id_1).unwrap().pf_cost_basis, dec!(1000));

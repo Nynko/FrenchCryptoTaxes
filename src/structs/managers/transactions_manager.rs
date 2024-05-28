@@ -108,7 +108,7 @@ mod tests {
     #[serial]
     fn test_unicity() {
         let mut tx_manager =
-            TransactionManager::new(Some(".data_test/transactions".to_string())).unwrap();
+            TransactionManager::new_non_persistent().unwrap();
 
         let tx1 = Transaction::Trade {
             tx: TransactionBase {
@@ -171,7 +171,7 @@ mod tests {
     #[serial]
     fn test_update() {
         let mut tx_manager =
-            TransactionManager::new(Some(".data_test/transactions2".to_string())).unwrap();
+            TransactionManager::new_non_persistent().unwrap();
 
         let tx1 = Transaction::Trade {
             tx: TransactionBase {
