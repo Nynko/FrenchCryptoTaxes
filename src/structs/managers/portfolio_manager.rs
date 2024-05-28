@@ -84,7 +84,7 @@ impl PortfolioManager {
         let mut state: HashMap<WalletId, PortfolioWalletSnapshot> = HashMap::new();
         for tx in txs {
             let is_taxable = tx.is_taxable();
-            let tx_id = tx.get_tx_base().id.clone();
+            let tx_id = tx.get_id().clone();
             if  self.portfolio_history.get(&tx_id).is_none(){
                 self.portfolio_history.insert(tx_id.to_string(), Portfolio::new(tx_id.to_string(),is_taxable));
             }

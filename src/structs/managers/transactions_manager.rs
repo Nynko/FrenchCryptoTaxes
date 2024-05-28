@@ -42,13 +42,9 @@ impl TransactionManager {
         return &self.transactions;
     }
 
-    pub fn get_mut(&mut self) -> &mut Vec<Transaction> {
-        return &mut self.transactions;
-    }
-
     /* Add transaction by avoiding duplicates */
     pub fn push(&mut self, tx: Transaction) {
-        if self.hash_set.insert(tx.get_tx_base().id.clone()) {
+        if self.hash_set.insert(tx.get_id().clone()) {
             self.transactions.push(tx);
         }
     }
@@ -62,7 +58,7 @@ impl TransactionManager {
 
     /* Add transaction by updating transaction that are equals by Hash implementation */
     pub fn push_update(&mut self, tx: Transaction) {
-        if self.hash_set.insert(tx.get_tx_base().id.clone()) {
+        if self.hash_set.insert(tx.get_id().clone()) {
             self.transactions.push(tx);
         } else {
             // if the value is already there -> update

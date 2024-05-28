@@ -125,8 +125,8 @@ fn simple_two_trades() {
         .calculate_portfolio_history(&transactions, &wallet_manager.wallets)
         .unwrap();
 
-    let tx_id_1 = &transactions[1].get_tx_base().id;
-    let tx_id_2 = &transactions[2].get_tx_base().id;
+    let tx_id_1 = transactions[1].get_id();
+    let tx_id_2 = transactions[2].get_id();
 
     assert_eq!(portfolio_manager.portfolio_history.get(tx_id_1).unwrap().pf_total_value, dec!(1200));
     assert_eq!(portfolio_manager.portfolio_history.get(tx_id_2).unwrap().pf_total_value, dec!(1300));

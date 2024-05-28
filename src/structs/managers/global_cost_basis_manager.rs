@@ -27,8 +27,8 @@ impl GlobalCostBasisManager{
             pf_total_cost: dec!(0),
         };
         for tx in txs {
-            self.global_cost_basis_history.insert(tx.get_tx_base().id.to_string(), global_cost_basis.clone());
-            let portfolio = portfolios.get(&tx.get_tx_base().id);
+            self.global_cost_basis_history.insert(tx.get_id().to_string(), global_cost_basis.clone());
+            let portfolio = portfolios.get(tx.get_id());
             global_cost_basis = self.calculate_cost_basis(tx, portfolio, global_cost_basis.clone());
         }
     }

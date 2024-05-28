@@ -100,6 +100,11 @@ pub struct TransactionBase {
 }
 
 impl Transaction {
+
+    pub fn get_id(&self) -> &TransactionId{
+        return &self.get_tx_base().id;
+    }
+
     pub fn get_tx_base(&self) -> &TransactionBase {
         match self {
             Transaction::Transfer { tx, .. } => tx,
@@ -117,7 +122,7 @@ impl Transaction {
             Transaction::Withdrawal { .. } => false,
         }
     }
-    
+
     /* Determine if a transaction is taxable (outside of if it has been marked taxable by the user in the portfolio).
     There is only one case were we know a transaction is for sure taxable: Trading to fiat */
     pub fn is_taxable(&self) -> bool {
