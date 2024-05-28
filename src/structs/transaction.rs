@@ -39,7 +39,6 @@ pub enum Transaction {
         to: WalletSnapshot,
         amount: Decimal,
         income : Option<Income>, // Income correspond to a Crypto Transfer to from and to the same wallet that can be a reward, a staking interest, an airdrop, a mining, or a payment in crypto 
-        cost_basis: GlobalCostBasis,
     },
     // Trade can be a Crypto/Crypto non taxable trade, or taxable sold of Crypto, or non taxable event: buying crypto
     Trade {
@@ -50,7 +49,6 @@ pub enum Transaction {
         sold_amount: Decimal,
         bought_amount: Decimal,
         trade_type: TradeType,
-        cost_basis: GlobalCostBasis,
     },
     Deposit {
         tx: TransactionBase,
@@ -119,16 +117,7 @@ impl Transaction {
             Transaction::Withdrawal { .. } => false,
         }
     }
-    /* To delete after moving the cost basis outside of transaction enum */
-    pub fn tmp_get_cost_basis(&self) -> Option<&GlobalCostBasis> {
-        match self {
-            Transaction::Trade { cost_basis, .. } => Some(cost_basis),
-            Transaction::Transfer { cost_basis, .. } => Some(cost_basis),
-            Transaction::Deposit { .. } => None,
-            Transaction::Withdrawal { .. } => None,
-        }
-    }
-
+    
     /* Determine if a transaction is taxable (outside of if it has been marked taxable by the user in the portfolio).
     There is only one case were we know a transaction is for sure taxable: Trading to fiat */
     pub fn is_taxable(&self) -> bool {

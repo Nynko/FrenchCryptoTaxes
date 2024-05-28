@@ -12,13 +12,27 @@ use crate::utils::{create_directories_if_needed, file_exists};
 pub trait Persistable: Serialize + DeserializeOwned {
     const PATH: &'static str;
 
-    fn new(path: Option<String>) -> Result<Self, IoError>
+    fn new(path:Option<String>)-> Result<Self, IoError>
+    where
+        Self: Sized
+    {
+        return Self::_new(path,true);
+    }
+
+    fn new_non_persistent()-> Result<Self, IoError>
+    where
+        Self: Sized
+    {
+        return Self::_new(None,false);
+    }
+
+    fn _new(path: Option<String>, persist: bool) -> Result<Self, IoError>
     where
         Self: Sized,
     {
         let path = path.unwrap_or(Self::PATH.to_string());
         if !file_exists(&path) {
-            return Ok(Self::default_new(path));
+            return Ok(Self::default_new(path,persist));
         } else {
             let file = File::open(&path).map_err(|e| IoError::new(e.to_string()))?;
             let deserialized: Self = rmp_serde::from_read(file).map_err(|e| IoError::new(e.to_string()))?;
@@ -47,5 +61,8 @@ pub trait Persistable: Serialize + DeserializeOwned {
     fn get_path(&self) -> &str;
 
     /* default value (new value): for instance Vec::new() */
-    fn default_new(path: String) -> Self;
+    fn default_new(path: String, persist: bool) -> Self;
+
+    /* Decide if it has to persist or not. This can be used in drop trait */
+    fn is_persistent(&self) -> bool;
 }

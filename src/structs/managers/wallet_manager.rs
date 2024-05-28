@@ -12,29 +12,37 @@ pub struct WalletManager {
     pub wallets: HashMap<String, Wallet>,
     pub wallet_ids: WalletIdMap,
     path: String,
+    persist: bool,
 }
 
 impl Persistable for WalletManager {
     const PATH: &'static str = ".data/wallets";
 
-    fn default_new(path: String) -> Self {
+    fn default_new(path: String, persist: bool) -> Self {
         Self {
             wallets: HashMap::new(),
             wallet_ids: WalletIdMap {
                 ids: HashMap::new(),
             },
             path,
+            persist
         }
     }
 
     fn get_path(&self) -> &str{
         return &self.path;
     }
+
+    fn is_persistent(&self) -> bool{
+        return self.persist;
+    }
 }
 
 impl Drop for WalletManager {
     fn drop(&mut self) {
-        let _save = self.save();
+        if self.persist{
+            let _save = self.save();
+        }
     }
 }
 

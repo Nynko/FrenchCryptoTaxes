@@ -122,13 +122,6 @@ pub async fn create_kraken_txs(
                         local_cost_basis: price_sold_currency * selling_amount,
                     };
                 }
-
-                // We initialize to 0, I am currently too lazy to overthink if we can use an Option or not
-                // The cost_basis will be calculated later.
-                let cost_basis = GlobalCostBasis {
-                    pf_cost_basis: dec!(0),
-                    pf_total_cost: dec!(0),
-                };
                 let tx = Transaction::Trade {
                     tx: TransactionBase {
                         id: refid.to_string(),
@@ -140,7 +133,6 @@ pub async fn create_kraken_txs(
                     sold_amount: selling_amount,
                     bought_amount: buying.amount,
                     trade_type,
-                    cost_basis,
                 };
                 txs.push(tx);
             }

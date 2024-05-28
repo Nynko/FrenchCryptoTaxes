@@ -12,21 +12,27 @@ pub struct TransactionManager {
     transactions: Vec<Transaction>, // Suggestion: Implement a SortedVec maybe
     hash_set: HashSet<TransactionId>, // HashSet for merging Vec<String> and preventing duplicates, the ID must comes from external sources OR deterministically created from "uniqueness" element of the transaction
     path: String,
+    persist: bool
 }
 
 impl Persistable for TransactionManager {
     const PATH: &'static str = ".data/transactions";
-
-    fn default_new(path: String) -> Self {
+ 
+    fn default_new(path: String, persist:bool) -> Self {
         Self {
             transactions: Vec::new(),
             hash_set: HashSet::new(),
             path,
+            persist
         }
     }
 
     fn get_path(&self) -> &str{
         return &self.path;
+    }
+
+    fn is_persistent(&self) -> bool {
+        return self.persist;
     }
 }
 
@@ -85,7 +91,9 @@ impl TransactionManager {
 
 impl Drop for TransactionManager {
     fn drop(&mut self) {
-        let _save = self.save();
+        if self.persist{
+            let _save = self.save();
+        }
     }
 }
 
@@ -127,10 +135,6 @@ mod tests {
             sold_amount: dec!(1),
             bought_amount: dec!(1300),
             trade_type: TradeType::CryptoToFiat,
-            cost_basis: GlobalCostBasis {
-                pf_cost_basis: dec!(0),
-                pf_total_cost: dec!(0),
-            },
         };
 
         let tx2 = Transaction::Trade {
@@ -154,10 +158,6 @@ mod tests {
             sold_amount: dec!(2),
             bought_amount: dec!(1400),
             trade_type: TradeType::CryptoToFiat,
-            cost_basis: GlobalCostBasis {
-                pf_cost_basis: dec!(0),
-                pf_total_cost: dec!(0),
-            },
         };
 
         assert_ne!(tx1, tx2);
@@ -198,10 +198,6 @@ mod tests {
             sold_amount: dec!(1),
             bought_amount: dec!(1300),
             trade_type: TradeType::CryptoToFiat,
-            cost_basis: GlobalCostBasis {
-                pf_cost_basis: dec!(0),
-                pf_total_cost: dec!(0),
-            },
         };
 
         let tx2 = Transaction::Trade {
@@ -225,10 +221,6 @@ mod tests {
             sold_amount: dec!(21),
             bought_amount: dec!(1400),
             trade_type: TradeType::CryptoToFiat,
-            cost_basis: GlobalCostBasis {
-                pf_cost_basis: dec!(0),
-                pf_total_cost: dec!(0),
-            },
         };
 
         assert_ne!(tx1, tx2);

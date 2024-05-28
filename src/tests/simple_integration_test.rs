@@ -39,7 +39,6 @@ fn simple_two_trades() {
         trade_type: TradeType::FiatToCrypto {
             local_cost_basis: dec!(1000),
         },
-        cost_basis: init_pf.clone(),
     };
 
     let tx1 = Transaction::Trade {
@@ -63,13 +62,6 @@ fn simple_two_trades() {
         sold_amount: dec!(1.125),
         bought_amount: dec!(450),
         trade_type: TradeType::CryptoToFiat,
-        // taxable: Some(Taxable {
-        //     is_taxable: true,
-        //     price_eur: dec!(1),
-        //     pf_total_value: dec!(1200),
-        //     is_pf_total_calculated: true,
-        // }),
-        cost_basis: init_pf.clone(),
     };
 
     let tx2 = Transaction::Trade {
@@ -93,16 +85,9 @@ fn simple_two_trades() {
         sold_amount: dec!(1.875),
         bought_amount: dec!(1300),
         trade_type: TradeType::CryptoToFiat,
-        // taxable: Some(Taxable {
-        //     is_taxable: true,
-        //     price_eur: dec!(1),
-        //     pf_total_value: dec!(1300),
-        //     is_pf_total_calculated: true,
-        // }),
-        cost_basis: init_pf.clone(),
     };
 
-    let mut transactions = vec![tx0, tx1, tx2];
+    let transactions = vec![tx0, tx1, tx2];
 
     let mut wallet_manager =
         WalletManager::new(Some(".data_test/simple_trade_wallet".to_string())).unwrap();
@@ -137,22 +122,25 @@ fn simple_two_trades() {
         PortfolioManager::new(Some(".data_test/simple_trade".to_string())).unwrap();
 
     portfolio_manager
-        .calculate_portfolio_history(&mut transactions, &wallet_manager.wallets)
+        .calculate_portfolio_history(&transactions, &wallet_manager.wallets)
         .unwrap();
 
-    assert_eq!(portfolio_manager.portfolio_history.get(&transactions[1].get_tx_base().id).unwrap().pf_total_value, dec!(1200));
-    assert_eq!(portfolio_manager.portfolio_history.get(&transactions[2].get_tx_base().id).unwrap().pf_total_value, dec!(1300));
+    let tx_id_1 = &transactions[1].get_tx_base().id;
+    let tx_id_2 = &transactions[2].get_tx_base().id;
+
+    assert_eq!(portfolio_manager.portfolio_history.get(tx_id_1).unwrap().pf_total_value, dec!(1200));
+    assert_eq!(portfolio_manager.portfolio_history.get(tx_id_2).unwrap().pf_total_value, dec!(1300));
 
 
     let mut cost_basis_manager = GlobalCostBasisManager::new(Some(".data_test/global_cost_basis".to_string())).unwrap();
-    cost_basis_manager.calculate_full_cost_basis(&mut transactions, &portfolio_manager.portfolio_history);
-    assert_eq!(transactions.get(1).unwrap().tmp_get_cost_basis().unwrap().pf_total_cost, dec!(1000));
-    assert_eq!(transactions.get(1).unwrap().tmp_get_cost_basis().unwrap().pf_cost_basis, dec!(1000));
-    assert_eq!(transactions.get(2).unwrap().tmp_get_cost_basis().unwrap().pf_total_cost, dec!(1000));
-    assert_eq!(transactions.get(2).unwrap().tmp_get_cost_basis().unwrap().pf_cost_basis, dec!(1000) - dec!(375));
-    let gains = calculate_tax_gains(&transactions[1],portfolio_manager.portfolio_history.get(&transactions[1].get_tx_base().id).unwrap());
+    cost_basis_manager.calculate_full_cost_basis(&transactions, &portfolio_manager.portfolio_history);
+    assert_eq!(cost_basis_manager.global_cost_basis_history.get(tx_id_1).unwrap().pf_total_cost, dec!(1000));
+    assert_eq!(cost_basis_manager.global_cost_basis_history.get(tx_id_1).unwrap().pf_cost_basis, dec!(1000));
+    assert_eq!(cost_basis_manager.global_cost_basis_history.get(tx_id_2).unwrap().pf_total_cost, dec!(1000));
+    assert_eq!(cost_basis_manager.global_cost_basis_history.get(tx_id_2).unwrap().pf_cost_basis, dec!(1000) - dec!(375));
+    let gains = calculate_tax_gains(&transactions[1],portfolio_manager.portfolio_history.get(tx_id_1).unwrap(),cost_basis_manager.global_cost_basis_history.get(tx_id_1).unwrap());
     assert_eq!(gains, dec!(75));
-    let gains = calculate_tax_gains(&transactions[2],portfolio_manager.portfolio_history.get(&transactions[2].get_tx_base().id).unwrap());
+    let gains = calculate_tax_gains(&transactions[2],portfolio_manager.portfolio_history.get(tx_id_2).unwrap(),cost_basis_manager.global_cost_basis_history.get(tx_id_2).unwrap());
     assert_eq!(gains, dec!(675));
 
     let _ = portfolio_manager.delete();

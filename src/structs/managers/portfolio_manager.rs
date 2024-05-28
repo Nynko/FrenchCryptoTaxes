@@ -21,6 +21,7 @@ If only one wallet is added, then we only have to call one API for this specific
 pub struct PortfolioManager {
     pub portfolio_history: HashMap<TransactionId, Portfolio>, // We store only for taxable Transactions
     path: String,
+    persist: bool
 }
 
 /*The pf_total_value should be set depending on the global value of the portfolio before each transaction (at least each taxable one).
@@ -46,21 +47,28 @@ impl Portfolio {
 impl Persistable for PortfolioManager {
     const PATH:  &'static str = ".data/portfolio_history";
 
-    fn default_new(path: String) -> Self {
+    fn default_new(path: String, persist: bool) -> Self {
         Self {
             portfolio_history: HashMap::new(),
             path,
+            persist
         }
     }
 
     fn get_path(&self) -> &str{
         return &self.path;
     }
+
+    fn is_persistent(&self) -> bool {
+        return self.persist;
+    }
 }
 
 impl Drop for PortfolioManager {
     fn drop(&mut self) {
-        let _save = self.save();
+        if self.persist{
+            let _save = self.save();
+        }
     }
 }
 
@@ -91,34 +99,6 @@ impl PortfolioManager {
         Ok(())
     }
 
-
-    // /* Implies that the portfolio has already been calculated */
-    // #[tokio::main]
-    // pub async fn update_tx_with_portfolio_value(
-    //     &mut self,
-    //     txs: &mut Vec<Transaction>,
-    // ) -> Result<(), PortfolioHistoryError> {
-    //     for tx in txs {
-    //         match tx {
-    //             Transaction::Trade {
-    //                 tx: base, taxable, ..
-    //             }
-    //             | Transaction::Transfer {
-    //                 tx: base, taxable, ..
-    //             } => {
-    //                 if let Some(tax) = taxable {
-    //                     if tax.is_taxable {
-    //                         tax.pf_total_value = self.calculate_total_value(&base.id).unwrap();
-    //                         tax.is_pf_total_calculated = true;
-    //                     }
-    //                 }
-    //             }
-    //             _ => (),
-    //         }
-    //     }
-    //     Ok(())
-    // }
-
     pub fn calculate_total_value(&self, tx_id: &TransactionId) -> Option<Decimal> {
         return self.portfolio_history.get(tx_id).map(|portfolio| {
             portfolio.wallet_snaps.values().fold(Decimal::new(0, 0), |acc, wallet| {
@@ -126,22 +106,6 @@ impl PortfolioManager {
             })
         });
     }
-
-    // #[tokio::main]
-    // pub async fn calculate_portfolio_history(
-    //     &mut self,
-    //     txs: &Vec<Transaction>,
-    //     wallets: &HashMap<String, Wallet>,
-    // ) -> Result<(), PortfolioHistoryError> {
-    //     let mut state: HashMap<WalletId, WalletSnapshot> = HashMap::new();
-    //     for tx in txs {
-    //         if  self.portfolio_history.get(&tx.get_tx_base().id).is_none(){
-    //             self.portfolio_history.insert(tx.get_tx_base().id.to_string(), HashMap::new());
-    //         }
-    //         self._calculate(tx, &mut state, wallets).await?;
-    //     }
-    //     Ok(())
-    // }
 
     async fn _calculate(
         &mut self,

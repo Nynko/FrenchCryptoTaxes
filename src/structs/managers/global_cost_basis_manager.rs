@@ -15,12 +15,13 @@ This allow to save the history of global cost basis with drop implementation
 pub struct GlobalCostBasisManager {
     pub global_cost_basis_history : HashMap<TransactionId,GlobalCostBasis>,
     path: String,
+    persist: bool,
 }
 
 
 impl GlobalCostBasisManager{
 
-    pub fn calculate_full_cost_basis(&mut self, txs: &mut Vec<Transaction>, portfolios: &HashMap<TransactionId,Portfolio>) {
+    pub fn calculate_full_cost_basis(&mut self, txs: &Vec<Transaction>, portfolios: &HashMap<TransactionId,Portfolio>) {
         let mut global_cost_basis = GlobalCostBasis {
             pf_cost_basis: dec!(0),
             pf_total_cost: dec!(0),
@@ -34,34 +35,32 @@ impl GlobalCostBasisManager{
 
 
     /* Calculate the cost_basis, here "acquisition_pf_net" */
-    fn calculate_cost_basis(&self, tx: &mut Transaction, portfolio: Option<&Portfolio>, current_pf: GlobalCostBasis) -> GlobalCostBasis {
+    fn calculate_cost_basis(&self, tx: &Transaction, portfolio: Option<&Portfolio>, current_pf: GlobalCostBasis) -> GlobalCostBasis {
         match tx {
             Transaction::Transfer {
                 to,
                 from,
                 amount,
-                cost_basis: pf,
                 ..
             } => {
-                pf.pf_cost_basis = current_pf.pf_cost_basis;
-                pf.pf_total_cost = current_pf.pf_total_cost;
-                return self.calculate_new_cost_basis(to, from, portfolio, &pf, *amount);
+                return self.calculate_new_cost_basis(to, from, portfolio, &current_pf, *amount);
             }
             Transaction::Trade {
                 to,
                 from,
                 sold_amount,
                 trade_type,
-                cost_basis: pf,
                 ..
             } => {
                 let added_cost = match trade_type {
                     TradeType::FiatToCrypto { local_cost_basis } => *local_cost_basis,
                     _ => dec!(0),
                 };
-                pf.pf_cost_basis = current_pf.pf_cost_basis + added_cost;
-                pf.pf_total_cost = current_pf.pf_total_cost + added_cost;
-                return self.calculate_new_cost_basis(to, from, portfolio, &pf, *sold_amount);
+                let new_gcs = self.calculate_new_cost_basis(to, from, portfolio, &current_pf, *sold_amount);
+                return GlobalCostBasis{
+                    pf_cost_basis: new_gcs.pf_cost_basis + added_cost,
+                    pf_total_cost: new_gcs.pf_total_cost + added_cost,
+                }
             }
             _ => current_pf, // ignoring the fiat deposit and withdrawal as they don't change the cost basis, they are here for accounting
         }
@@ -105,21 +104,28 @@ impl GlobalCostBasisManager{
 impl Persistable for GlobalCostBasisManager {
     const PATH:  &'static str = ".data/global_cost_basis_history";
 
-    fn default_new(path: String) -> Self {
+    fn default_new(path: String, persist:bool) -> Self {
         Self {
             global_cost_basis_history: HashMap::new(),
             path,
+            persist
         }
     }
 
     fn get_path(&self) -> &str{
         return &self.path;
     }
+
+    fn is_persistent(&self) -> bool {
+        return self.persist;
+    }
 }
 
 impl Drop for GlobalCostBasisManager {
     fn drop(&mut self) {
-        let _save = self.save();
+        if self.persist{
+            let _save = self.save();
+        }
     }
 }
 
@@ -184,11 +190,6 @@ mod tests {
         let fee = dec!(0.001);
         let fee_eur = fee * price_eur_btc;
 
-        let init_pf = GlobalCostBasis {
-            pf_cost_basis: dec!(0),
-            pf_total_cost: dec!(0),
-        };
-
         let mut tx = Transaction::Transfer {
             tx: TransactionBase {
                 id: "test".to_string(),
@@ -207,27 +208,22 @@ mod tests {
                 price_eur: price_eur_btc,
             },
             amount: dec!(1),
-            cost_basis: init_pf,
             income: None,
         };
 
-        let cost_basis_manager = GlobalCostBasisManager::new(Some(".data_test/global_cost_basis".to_string())).unwrap();
+        let cost_basis_manager = GlobalCostBasisManager::new_non_persistent().unwrap();
 
         let new_pf = cost_basis_manager.calculate_cost_basis(&mut tx, None, current_pf);
 
         assert_eq!(new_pf.pf_total_cost, dec!(500) + fee_eur);
         assert_eq!(new_pf.pf_cost_basis, dec!(500) + fee_eur);
+
     }
 
     #[test]
     fn simple_trades() {
         let current_pf = get_pf(dec!(18000), dec!(18000));
         let (btc_wallet, eur_wallet, _eth_wallet) = create_wallets();
-
-        let init_pf = GlobalCostBasis {
-            pf_cost_basis: dec!(0),
-            pf_total_cost: dec!(0),
-        };
 
         let mut tx = Transaction::Trade {
             tx: TransactionBase {
@@ -236,7 +232,7 @@ mod tests {
             },
             from: WalletSnapshot {
                 id: btc_wallet.get_id().to_string(),
-                pre_tx_balance: dec!(1),
+                pre_tx_balance: dec!(8),
                 fee: None,
                 price_eur: dec!(4000),
             },
@@ -250,7 +246,6 @@ mod tests {
             sold_amount: dec!(5),
             bought_amount: dec!(20000),
             trade_type: TradeType::CryptoToFiat,
-            cost_basis: init_pf,
         };
 
         let portfolio = Portfolio {
@@ -261,24 +256,21 @@ mod tests {
             is_pf_total_calculated: true,
         };
 
-        let cost_basis_manager = GlobalCostBasisManager::new(Some(".data_test/global_cost_basis".to_string())).unwrap();
-        let new_pf = cost_basis_manager.calculate_cost_basis(&mut tx,Some(&portfolio), current_pf);
-
-        assert_eq!(new_pf.pf_total_cost, dec!(18000));
-        assert_eq!(new_pf.pf_cost_basis, dec!(18000) - dec!(11250));
-
-        let gains = calculate_tax_gains(&tx, &portfolio);
+        let gains = calculate_tax_gains(&tx, &portfolio, &current_pf);
         assert_eq!(gains, dec!(8750));
+
+        let cost_basis_manager = GlobalCostBasisManager::new_non_persistent().unwrap();
+        let next_cost_basis = cost_basis_manager.calculate_cost_basis(&mut tx,Some(&portfolio), current_pf);
+
+        assert_eq!(next_cost_basis.pf_total_cost, dec!(18000));
+        assert_eq!(next_cost_basis.pf_cost_basis, dec!(18000) - dec!(11250));
+
+
     }
 
     #[test]
     fn simple_two_trades() {
         let (btc_wallet, eur_wallet, _eth_wallet) = create_wallets();
-
-        let init_pf = GlobalCostBasis {
-            pf_cost_basis: dec!(0),
-            pf_total_cost: dec!(0),
-        };
 
         let mut tx0 = Transaction::Trade {
             tx: TransactionBase {
@@ -295,29 +287,33 @@ mod tests {
                 id: btc_wallet.get_id().to_string(),
                 pre_tx_balance: dec!(0),
                 fee: None,
-                price_eur: dec!(500),
+                price_eur: dec!(0), // No need for that 
             },
             exchange_pair: Some(("BTC".to_string(), "EUR".to_uppercase())),
             sold_amount: dec!(1000),
-            bought_amount: dec!(2),
+            bought_amount: dec!(3),
             trade_type: TradeType::FiatToCrypto {
                 local_cost_basis: dec!(1000),
             },
-            cost_basis: init_pf.clone(),
         };
-        let cost_basis_manager = GlobalCostBasisManager::new(Some(".data_test/global_cost_basis".to_string())).unwrap();
+
+        let init_pf = GlobalCostBasis {
+            pf_cost_basis: dec!(0),
+            pf_total_cost: dec!(0),
+        };
+        let cost_basis_manager = GlobalCostBasisManager::new_non_persistent().unwrap();
         let current_pf = cost_basis_manager.calculate_cost_basis(&mut tx0, None,init_pf.clone());
 
-        let mut tx = Transaction::Trade {
+        let tx = Transaction::Trade {
             tx: TransactionBase {
                 id: "test".to_string(),
                 timestamp: Utc::now(),
             },
             from: WalletSnapshot {
                 id: btc_wallet.get_id().to_string(),
-                pre_tx_balance: dec!(2),
+                pre_tx_balance: dec!(3),
                 fee: None,
-                price_eur: dec!(450),
+                price_eur: dec!(400),
             },
             to: WalletSnapshot {
                 id: eur_wallet.get_id().to_string(),
@@ -326,10 +322,9 @@ mod tests {
                 price_eur: dec!(1),
             },
             exchange_pair: Some(("BTC".to_string(), "EUR".to_uppercase())),
-            sold_amount: dec!(1),
+            sold_amount: dec!(1.125),
             bought_amount: dec!(450),
             trade_type: TradeType::CryptoToFiat,
-            cost_basis: init_pf.clone(),
         };
 
         let portfolio = Portfolio {
@@ -340,19 +335,14 @@ mod tests {
             is_pf_total_calculated: true,
         };
 
-        let new_pf = cost_basis_manager.calculate_cost_basis(&mut tx, Some(&portfolio), current_pf);
+        let gains = calculate_tax_gains(&tx, &portfolio, &current_pf);
+  
+        assert_eq!(gains, dec!(75));
+
+        let new_pf = cost_basis_manager.calculate_cost_basis(&tx, Some(&portfolio), current_pf);
 
         assert_eq!(new_pf.pf_total_cost, dec!(1000));
         assert_eq!(new_pf.pf_cost_basis, dec!(1000) - dec!(375));
-
-        let gains = calculate_tax_gains(&tx, &portfolio);
-        assert_eq!(gains, dec!(75));
-
-        // Price update
-        let init_pf2 = GlobalCostBasis {
-            pf_cost_basis: dec!(0),
-            pf_total_cost: dec!(0),
-        };
 
         let mut tx2 = Transaction::Trade {
             tx: TransactionBase {
@@ -361,9 +351,9 @@ mod tests {
             },
             from: WalletSnapshot {
                 id: btc_wallet.get_id().to_string(),
-                pre_tx_balance: dec!(1),
+                pre_tx_balance: dec!(1.875),
                 fee: None,
-                price_eur: dec!(1300),
+                price_eur: dec!(693.33333333333333333333333333),
             },
             to: WalletSnapshot {
                 id: eur_wallet.get_id().to_string(),
@@ -372,10 +362,9 @@ mod tests {
                 price_eur: dec!(1),
             },
             exchange_pair: None,
-            sold_amount: dec!(1),
+            sold_amount: dec!(1.875),
             bought_amount: dec!(1300),
             trade_type: TradeType::CryptoToFiat,
-            cost_basis: init_pf2,
         };
 
         let portfolio2 = Portfolio {
@@ -386,13 +375,15 @@ mod tests {
             is_pf_total_calculated: true,
         };
 
+        let gains = calculate_tax_gains(&tx2,&portfolio2, &new_pf);
+        assert_eq!(gains, dec!(675));
+
         let new_pf2 = cost_basis_manager.calculate_cost_basis(&mut tx2, Some(&portfolio2), new_pf);
 
         assert_eq!(new_pf2.pf_total_cost, dec!(1000));
 
         assert_eq!(new_pf2.pf_cost_basis, dec!(0));
 
-        let gains = calculate_tax_gains(&tx2,&portfolio2);
-        assert_eq!(gains, dec!(675));
+
     }
 }

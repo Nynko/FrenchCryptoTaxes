@@ -9,24 +9,22 @@ plus_value =  prix_cession - (acquisition_pf_net * prix_cession / valeur_pf )
 
 The transaction must be taxable, otherwise it will panic !
 */
-pub fn calculate_tax_gains(tx: &Transaction, portfolio: &Portfolio) -> Decimal {
+pub fn calculate_tax_gains(tx: &Transaction, portfolio: &Portfolio, cost_basis: &GlobalCostBasis) -> Decimal {
     match tx {
         Transaction::Transfer {
             amount,
-            cost_basis: pf,
             to,from,
             ..
         }
         | Transaction::Trade {
             sold_amount: amount,
-            cost_basis: pf,
             to, from,
             ..
         } => {
             let pf_total_value = portfolio.pf_total_value;
             let sell_price: Decimal = Decimal::from(*amount) * from.price_eur;
             let fee = to.fee.unwrap_or(dec!(0)) * to.price_eur + from.fee.unwrap_or(dec!(0)) * from.price_eur;
-            return _calculate_tax(sell_price, fee,&pf, pf_total_value);
+            return _calculate_tax(sell_price, fee,cost_basis, pf_total_value);
         }
         _ => dec!(0),
     }
@@ -35,10 +33,10 @@ pub fn calculate_tax_gains(tx: &Transaction, portfolio: &Portfolio) -> Decimal {
 pub fn _calculate_tax(
     sell_price: Decimal,
     total_fee: Decimal,
-    pf: &GlobalCostBasis,
+    cost_basis: &GlobalCostBasis,
     pf_total_value: Decimal,
 ) -> Decimal {
-    return (sell_price - total_fee) - calculate_weigted_price(sell_price, pf.pf_cost_basis, pf_total_value);
+    return (sell_price - total_fee) - calculate_weigted_price(sell_price, cost_basis.pf_cost_basis, pf_total_value);
 }
 
 /* (acquisition_pf_net * prix_cession / valeur_pf ) */
