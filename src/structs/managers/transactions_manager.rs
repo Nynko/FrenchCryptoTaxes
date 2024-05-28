@@ -100,7 +100,7 @@ mod tests {
     use rust_decimal_macros::dec;
     use serial_test::serial;
 
-    use crate::structs::{GlobalCostBasis, TradeType, TransactionBase, WalletSnapshot};
+    use crate::structs::{TradeType, TransactionBase, WalletSnapshot};
 
     use super::*;
 

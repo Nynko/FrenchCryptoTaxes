@@ -49,6 +49,8 @@ impl Drop for WalletManager {
 #[cfg(test)]
 mod tests {
 
+    use std::{thread::sleep, time::Duration};
+
     use serial_test::serial;
 
     use crate::structs::wallet::Platform;
@@ -116,6 +118,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_drop_after_panic_part2() {
+        sleep(Duration::from_millis(10));
         let wallet_manager =
             WalletManager::new(Some(".data_test/wallet_drop_panic".to_string())).unwrap();
         assert_eq!(

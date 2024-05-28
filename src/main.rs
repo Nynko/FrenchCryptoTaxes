@@ -7,8 +7,8 @@ pub mod tests;
 pub mod utils;
 use api::handle_kraken_data;
 use dotenv::dotenv;
-use functions::{calculate_tax_gains};
-use structs::{cost_basis, global_cost_basis_manager::{self, GlobalCostBasisManager}, Persistable, Transaction, TransactionManager, WalletManager};
+use functions::calculate_tax_gains;
+use structs::{global_cost_basis_manager::GlobalCostBasisManager, Persistable, TransactionManager, WalletManager};
 
 use crate::structs::PortfolioManager;
 

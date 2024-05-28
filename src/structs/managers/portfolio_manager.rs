@@ -140,7 +140,6 @@ impl PortfolioManager {
                 self.update_balance_from_wallet(
                     from_wallet,
                     sold_amount,
-                    tx.id.clone(),
                     previous_state,
                 )?;
                 self.update_balance_to_wallet(to_wallet, to, bought_amount, previous_state);
@@ -170,7 +169,6 @@ impl PortfolioManager {
                 self.update_balance_from_wallet(
                     from_wallet,
                     amount,
-                    tx.id.clone(),
                     previous_state,
                 )?;
                 self.update_balance_to_wallet(to_wallet, to, amount, previous_state);
@@ -191,7 +189,7 @@ impl PortfolioManager {
         if let Some(Wallet::Crypto(base)) = from {
             let previous_snap = previous_state.get_mut(&base.id);
             if let Some(prev_snap) = previous_snap {
-                if (prev_snap.pre_tx_balance != from_snap.pre_tx_balance) {
+                if prev_snap.pre_tx_balance != from_snap.pre_tx_balance {
                     // return Err(PortfolioHistoryError::MismatchBetweenBalances {
                     //     threshold: dec!(0),
                     //     old_balance: prev_snap.balance,
@@ -233,7 +231,6 @@ impl PortfolioManager {
         &self,
         from: Option<&Wallet>,
         amount: &Decimal,
-        tx_id: TransactionId,
         previous_state: &mut HashMap<WalletId, PortfolioWalletSnapshot>,
     ) -> Result<(), PortfolioHistoryError> {
         if let Some(Wallet::Crypto(base)) = from {

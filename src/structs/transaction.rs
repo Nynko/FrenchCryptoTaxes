@@ -1,4 +1,4 @@
-use super::{GlobalCostBasis, Wallet, WalletSnapshot};
+use super::{Wallet, WalletSnapshot};
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;

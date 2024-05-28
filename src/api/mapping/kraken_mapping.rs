@@ -12,7 +12,7 @@ use crate::{
     structs::{
         wallet::{Owner, Platform, WalletBase},
         wallet_manager::WalletManager,
-        GlobalCostBasis, TradeType, Transaction, TransactionBase, Wallet, WalletSnapshot,
+        TradeType, Transaction, TransactionBase, Wallet, WalletSnapshot,
     },
     utils::{f64_to_datetime_utc, generate_id},
 };
@@ -25,8 +25,8 @@ pub async fn create_kraken_txs(
     ledger: Vec<LedgerHistory>,
     trades: HashMap<String, TradeInfo>,
     deposits: HashMap<String, Deposit>,
-    withdrawals: HashMap<String, Withdrawal>,
-    pairs: HashMap<(String, String), String>,
+    _withdrawals: HashMap<String, Withdrawal>,
+    _pairs: HashMap<(String, String), String>,
 ) -> Result<(), ApiError> {
     let platform = Platform::Kraken;
     let mut index = 0;
@@ -105,7 +105,6 @@ pub async fn create_kraken_txs(
                             get_currency_price(time.to_string(), sold_currency.to_string())
                                 .await?;
                     }
-                    let is_taxable = true;
                 } else if let Some(fiat) = FiatKraken::from_str(&sold_currency) {
                     let price_sold_currency: Decimal;
                     if fiat.is_eur() {
@@ -476,7 +475,7 @@ impl FiatKraken {
 #[cfg(test)]
 mod tests {
 
-    use super::*;
+    // use super::*;
 
     #[test]
     fn test_mapping() {}

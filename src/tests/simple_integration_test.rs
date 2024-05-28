@@ -1,21 +1,15 @@
 use chrono::Utc;
 use rust_decimal_macros::dec;
-use serde_json::to_string;
 
 use crate::{
     functions::calculate_tax_gains,
     structs::{
-        portfolio_manager::{self, PortfolioManager}, wallet_manager::{self, WalletManager}, GlobalCostBasis, GlobalCostBasisManager, Owner, Persistable, Platform, TradeType, Transaction, TransactionBase, Wallet, WalletBase, WalletSnapshot
+        portfolio_manager::PortfolioManager, wallet_manager::WalletManager, GlobalCostBasisManager, Owner, Persistable, Platform, TradeType, Transaction, TransactionBase, Wallet, WalletBase, WalletSnapshot
     },
 };
 
 #[test]
 fn simple_two_trades() {
-    let init_pf = GlobalCostBasis {
-        pf_cost_basis: dec!(0),
-        pf_total_cost: dec!(0),
-    };
-
     let tx0 = Transaction::Trade {
         tx: TransactionBase {
             id: "test0".to_string(),

@@ -23,7 +23,7 @@ pub trait Persistable: Serialize + DeserializeOwned {
     where
         Self: Sized
     {
-        return Self::_new(None,false);
+        return Self::_new(Some(".data/non_persistent".to_string()),false);
     }
 
     fn _new(path: Option<String>, persist: bool) -> Result<Self, IoError>

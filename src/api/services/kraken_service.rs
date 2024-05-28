@@ -1,15 +1,11 @@
 use std::fs::File;
 
-use chrono::{DateTime, Utc};
-use hashbrown::HashMap;
 use rmp_serde::Serializer;
-use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::{
     api::{
-        create_kraken_txs, fetch_assets_pair, fetch_history_kraken, map_asset_pairs, Deposit,
-        HistoryResponse, KrakenPairs, LedgerHistory, Tier, TradeInfo, Withdrawal,
+        create_kraken_txs, fetch_assets_pair, fetch_history_kraken, map_asset_pairs, HistoryResponse, KrakenPairs, Tier,
     },
     errors::IoError,
     structs::{transaction::Transaction, wallet_manager::WalletManager},
@@ -100,14 +96,4 @@ pub fn get_kraken_history() -> Result<HistoryResponse, IoError> {
             rmp_serde::from_read(file).map_err(|e| IoError::new(e.to_string()))?;
         return Ok(deserialized_map);
     }
-}
-
-fn load_if_exist<T: for<'de> Deserialize<'de>>(file_path: &str) -> Result<Option<T>, IoError> {
-    if file_exists(file_path) {
-        let file = File::open(file_path).map_err(|e| IoError::new(e.to_string()))?;
-        let deserialized_map: T =
-            rmp_serde::from_read(file).map_err(|e| IoError::new(e.to_string()))?;
-        return Ok(Some(deserialized_map));
-    }
-    return Ok(None);
 }

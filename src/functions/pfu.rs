@@ -1,5 +1,4 @@
-use crate::structs::{GlobalCostBasis, Portfolio, TradeType, Transaction, TransactionId, WalletSnapshot};
-use hashbrown::HashMap;
+use crate::structs::{GlobalCostBasis, Portfolio, Transaction};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 
