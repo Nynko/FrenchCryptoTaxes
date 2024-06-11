@@ -5,8 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     api::{
-        fetch_specific_trade_data, kraken_pairs, AssetPair, Deposit, EntryType, LedgerHistory,
-        TradeInfo, Withdrawal,
+        fetch_specific_trade_data, kraken_pairs, AssetPair, Deposit, EntryType, LedgerHistory, SubType, TradeInfo, Withdrawal
     },
     errors::{ApiError, MappingError},
     structs::{
@@ -25,7 +24,7 @@ pub async fn create_kraken_txs(
     ledger: Vec<LedgerHistory>,
     trades: HashMap<String, TradeInfo>,
     deposits: HashMap<String, Deposit>,
-    _withdrawals: HashMap<String, Withdrawal>,
+    withdrawals: HashMap<String, Withdrawal>,
     _pairs: HashMap<(String, String), String>,
 ) -> Result<(), ApiError> {
     let platform = Platform::Kraken;
@@ -134,15 +133,15 @@ pub async fn create_kraken_txs(
                     trade_type,
                 };
                 txs.push(tx);
-            }
-            // EntryType::Transfer => { // Mostly staking to spot and spot to staking, can apply but no need for now
-            // Only useful for having more notion of what happened to determine what we did.
-            //     match entry.subtype{
-            //         "stakingtospot" => {},
-            //         _ => (),
-            //     }
+            },
+            EntryType::Transfer => { 
+                println!("Transfer subtype: {:?} , {:?}", entry.subtype, entry);
+                match entry.subtype{
+                    SubType::StakingToSpot => {},
+                    _ => (),
+                }
 
-            // },
+            },
             EntryType::Deposit => {
                 // We only take Deposits in Crypto into account for now
                 let currency = &entry.asset;
@@ -196,8 +195,18 @@ pub async fn create_kraken_txs(
                 }
             }
             EntryType::Withdrawal => {
-
-            },
+                let currency = &entry.asset;
+                if !FiatKraken::is_fiat(currency) {
+                let refid = &entry.refid;
+                let withdrawal = withdrawals.get(refid).unwrap();
+                let from_address = &withdrawal.info;
+                let tx_id = &withdrawal.txid;
+                let amount = entry.amount;
+                let balance_after = entry.balance;
+                let fee = entry.fee;
+                let time =  entry.time;
+                println!("Withdraw Crypto : {amount} {currency} - {:?}",  entry.subtype);
+            }},
             // EntryType::Staking => todo!(),
             // EntryType::Reward => todo!(),
             _ => (),

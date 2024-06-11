@@ -499,12 +499,24 @@ pub enum EntryType {
     CustodyTransfer,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SubType{
+    StakingToSpot,
+    StakingFromSpot,
+    SpotToStaking,
+    SpotFromStaking,
+    Migration,
+    #[serde(rename = "")]
+    Empty
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct LedgerHistory {
     pub refid: String,
     pub time: f64,
     pub r#type: EntryType,
-    pub subtype: String,
+    pub subtype: SubType,
     pub aclass: String,
     pub asset: String,
     pub amount: Decimal,
@@ -636,7 +648,6 @@ mod tests {
 
         // Deserialize the JSON string into a Response struct
         let _response: Response<WithdrawalInfo> = serde_json::from_str(json_str).unwrap();
-        println!("{:?}", _response);
     }
 
     #[test]
@@ -664,7 +675,5 @@ mod tests {
 
         // Deserialize the JSON string into a Response struct
         let _response: Response<DepositInfo> = serde_json::from_str(json_str).unwrap();
-
-        println!("{:?}", _response);
     }
 }
