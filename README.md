@@ -5,12 +5,14 @@
 Ce projet est en cours de développement, la première version devrait arriver avant les impôts de 2025. 
 
 Si vous aimeriez participer à ce projet, n'hésitez pas à me contacter !
+(Reprise du développement prévu courant 2025)
 
 
 ------------
 
 This project is currently under development, with the first version due to arrive before the French taxes of 2025. 
 If you'd like to take part in this project, don't hesitate to contact me!
+(I plan on starting the development again around 2025)
 
 
 ## Quick introduction: Why this project ?
@@ -35,6 +37,7 @@ Current implementation:
 - Saving data (through what I called managers) as MessagePack with serde serialization and deserialization, for now all is in memory.
 
 Todo: 
+- [ ] Finish kraken transaction mapping
 - [ ] Checking missing trade
 - [ ] CLI interaction / or front end implementation
 - [ ] More tests implementations
