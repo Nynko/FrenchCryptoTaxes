@@ -2,15 +2,14 @@
 
 > English version below
 
-Ce projet est en cours de développement, la première version devrait arriver avant les impôts de 2025. 
+Ce projet est en cours de développement, la première version devrait arriver avant les impôts de 2026. 
 
 Si vous aimeriez participer à ce projet, n'hésitez pas à me contacter !
-(Reprise du développement prévu courant 2025)
 
 
 ------------
 
-This project is currently under development, with the first version due to arrive before the French taxes of 2025. 
+This project is currently under development, with the first version due to arrive before the French taxes of 2026. 
 If you'd like to take part in this project, don't hesitate to contact me!
 (I plan on starting the development again around 2025)
 
